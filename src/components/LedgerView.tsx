@@ -1,0 +1,418 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { DailyLedgerRow, StockMovement, UserProfile, Shop } from '@/types';
+import {
+  FileSpreadsheet,
+  Download,
+  Share2,
+  Calendar,
+  Search,
+  Filter,
+  Layers,
+  ArrowUpDown,
+  History,
+} from 'lucide-react';
+import { openWhatsAppChat } from '@/lib/whatsapp';
+
+interface LedgerViewProps {
+  user: UserProfile;
+  shop: Shop;
+}
+
+export const LedgerView: React.FC<LedgerViewProps> = ({ user, shop }) => {
+  const [selectedDate, setSelectedDate] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  );
+  const [activeTab, setActiveTab] = useState<'summary' | 'audit'>('summary');
+  const [ledgerRows, setLedgerRows] = useState<DailyLedgerRow[]>([]);
+  const [movements, setMovements] = useState<StockMovement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+
+  const fetchLedger = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`/api/ledger?date=${selectedDate}`);
+      const data = await res.json();
+      if (res.ok) {
+        setLedgerRows(data.ledger || []);
+        setMovements(data.movements || []);
+      }
+    } catch (e) {
+      console.error('Error fetching ledger:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLedger();
+  }, [selectedDate]);
+
+  // Extract categories for filter
+  const categories = useMemo(() => {
+    const s = new Set<string>();
+    ledgerRows.forEach((r) => s.add(r.category));
+    return Array.from(s);
+  }, [ledgerRows]);
+
+  // Filtered rows
+  const filteredRows = useMemo(() => {
+    return ledgerRows.filter((r) => {
+      const matchesCat = categoryFilter === 'all' || r.category === categoryFilter;
+      const q = searchQuery.toLowerCase();
+      const matchesSearch =
+        !q ||
+        r.product_name.toLowerCase().includes(q) ||
+        r.brand.toLowerCase().includes(q);
+      return matchesCat && matchesSearch;
+    });
+  }, [ledgerRows, categoryFilter, searchQuery]);
+
+  // Totals calculations
+  const totals = useMemo(() => {
+    return filteredRows.reduce(
+      (acc, r) => {
+        acc.opening += r.opening_stock;
+        acc.received += r.received;
+        acc.sold += r.sold;
+        acc.returns += r.returns;
+        acc.damaged += r.damaged;
+        acc.adjustments += r.adjustments;
+        acc.closing += r.closing_stock;
+        acc.valCost += r.valuation_cost;
+        acc.valRetail += r.valuation_retail;
+        return acc;
+      },
+      {
+        opening: 0,
+        received: 0,
+        sold: 0,
+        returns: 0,
+        damaged: 0,
+        adjustments: 0,
+        closing: 0,
+        valCost: 0,
+        valRetail: 0,
+      }
+    );
+  }, [filteredRows]);
+
+  // CSV Export
+  const handleExportCsv = () => {
+    const headers = [
+      'Product Name',
+      'Brand',
+      'Category',
+      'Opening Stock',
+      'Stock Received',
+      'Quantity Sold',
+      'Customer Returns',
+      'Damaged / Lost',
+      'Adjustments',
+      'Closing Stock',
+      'Purchase Cost',
+      'Selling Price',
+      'Cost Valuation',
+      'Retail Valuation',
+    ];
+
+    const rows = filteredRows.map((r) => [
+      `"${r.product_name.replace(/"/g, '""')}"`,
+      `"${r.brand}"`,
+      `"${r.category}"`,
+      r.opening_stock,
+      r.received,
+      r.sold,
+      r.returns,
+      r.damaged,
+      r.adjustments,
+      r.closing_stock,
+      r.purchase_cost,
+      r.selling_price,
+      r.valuation_cost,
+      r.valuation_retail,
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Stock_Ledger_${shop.name.replace(/\s+/g, '_')}_${selectedDate}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // WhatsApp Share Daily Executive Summary
+  const handleShareWhatsAppReport = () => {
+    const message = `📊 *DAILY STOCK REPORT: ${shop.name.toUpperCase()}*
+📅 *Date:* ${new Date(selectedDate).toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    })}
+----------------------------------------
+📦 *Opening Stock:* ${totals.opening} units
+📥 *Stock Received:* +${totals.received} units
+📤 *Units Sold:* -${totals.sold} units
+🔄 *Returns Restocked:* +${totals.returns} units
+⚠️ *Damaged / Lost:* -${totals.damaged} units
+⚙️ *Adjustments:* ${totals.adjustments >= 0 ? '+' : ''}${totals.adjustments} units
+🏁 *Closing Stock:* *${totals.closing} units*
+----------------------------------------
+💰 *Valuation at Cost:* ₹${totals.valCost.toLocaleString('en-IN')}
+🏷️ *Valuation at Retail:* ₹${totals.valRetail.toLocaleString('en-IN')}
+----------------------------------------
+Generated by ${user.full_name} via ${shop.name} Billing App`;
+
+    openWhatsAppChat(shop.phone, message);
+  };
+
+  return (
+    <div className="pb-28 max-w-7xl mx-auto px-3 py-3 space-y-3">
+      {/* Title & Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h2 className="text-base font-bold text-white flex items-center gap-1.5">
+            <FileSpreadsheet className="w-5 h-5 text-emerald-400" /> Daily Stock Ledger
+          </h2>
+          <p className="text-xs text-slate-400">Opening, movements & closing stock reconciliation</p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleShareWhatsAppReport}
+            className="flex items-center gap-1 py-1.5 px-3 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-400 text-xs font-semibold border border-emerald-500/40 transition active:scale-95"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            <span>WhatsApp Summary</span>
+          </button>
+
+          <button
+            onClick={handleExportCsv}
+            className="flex items-center gap-1 py-1.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition active:scale-95"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>CSV</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Date & Filter Controls */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-900 border border-slate-800 rounded-2xl p-3 text-xs">
+        <div className="flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-emerald-400 shrink-0" />
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-white focus:outline-none focus:border-emerald-500"
+          />
+        </div>
+
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search product..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+          />
+        </div>
+
+        <div>
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-white focus:outline-none focus:border-emerald-500"
+          >
+            <option value="all">All Categories</option>
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Tabs: Summary vs Audit Movements */}
+      <div className="flex border-b border-slate-800 text-xs">
+        <button
+          onClick={() => setActiveTab('summary')}
+          className={`py-2 px-4 font-bold border-b-2 transition ${
+            activeTab === 'summary'
+              ? 'border-emerald-500 text-emerald-400'
+              : 'border-transparent text-slate-400 hover:text-white'
+          }`}
+        >
+          Daily Ledger Summary
+        </button>
+        <button
+          onClick={() => setActiveTab('audit')}
+          className={`py-2 px-4 font-bold border-b-2 transition flex items-center gap-1 ${
+            activeTab === 'audit'
+              ? 'border-emerald-500 text-emerald-400'
+              : 'border-transparent text-slate-400 hover:text-white'
+          }`}
+        >
+          <History className="w-3.5 h-3.5" /> Movement Audit Trail ({movements.length})
+        </button>
+      </div>
+
+      {/* Totals Metric Strip */}
+      {activeTab === 'summary' && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+            <span className="text-slate-400 block text-[10px]">Total Opening</span>
+            <span className="text-base font-bold text-white">{totals.opening} units</span>
+          </div>
+          <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+            <span className="text-slate-400 block text-[10px]">Total Received / Sold</span>
+            <span className="text-base font-bold text-emerald-400">
+              +{totals.received} / -{totals.sold}
+            </span>
+          </div>
+          <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+            <span className="text-slate-400 block text-[10px]">Total Closing Stock</span>
+            <span className="text-base font-bold text-white">{totals.closing} units</span>
+          </div>
+          <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+            <span className="text-slate-400 block text-[10px]">Cost Valuation</span>
+            <span className="text-base font-bold text-emerald-400">
+              ₹{totals.valCost.toLocaleString('en-IN')}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Ledger Table / Mobile Cards */}
+      {activeTab === 'summary' ? (
+        <div className="space-y-2">
+          {filteredRows.map((row) => (
+            <div
+              key={row.product_id}
+              className="bg-slate-900 border border-slate-800 rounded-2xl p-3 shadow-sm text-xs space-y-2"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-bold text-white truncate">{row.product_name}</div>
+                  <div className="text-[10px] text-slate-400">
+                    {row.brand} • {row.category}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="text-xs font-black text-emerald-400">
+                    {row.closing_stock} Closing
+                  </span>
+                  <div className="text-[10px] text-slate-400">
+                    ₹{row.valuation_cost} val
+                  </div>
+                </div>
+              </div>
+
+              {/* Movement Equation Breakdown Grid */}
+              <div className="grid grid-cols-6 gap-1 pt-2 border-t border-slate-800/80 text-center text-[10px]">
+                <div className="bg-slate-800/40 p-1 rounded-lg">
+                  <span className="text-slate-500 block">Open</span>
+                  <span className="font-bold text-slate-200">{row.opening_stock}</span>
+                </div>
+                <div className="bg-slate-800/40 p-1 rounded-lg">
+                  <span className="text-emerald-500 block">+In</span>
+                  <span className="font-bold text-emerald-400">+{row.received}</span>
+                </div>
+                <div className="bg-slate-800/40 p-1 rounded-lg">
+                  <span className="text-blue-400 block">-Sold</span>
+                  <span className="font-bold text-blue-300">-{row.sold}</span>
+                </div>
+                <div className="bg-slate-800/40 p-1 rounded-lg">
+                  <span className="text-green-500 block">+Ret</span>
+                  <span className="font-bold text-green-300">+{row.returns}</span>
+                </div>
+                <div className="bg-slate-800/40 p-1 rounded-lg">
+                  <span className="text-red-400 block">-Loss</span>
+                  <span className="font-bold text-red-300">-{row.damaged}</span>
+                </div>
+                <div className="bg-slate-800/40 p-1 rounded-lg">
+                  <span className="text-amber-400 block">±Adj</span>
+                  <span className="font-bold text-amber-300">
+                    {row.adjustments >= 0 ? `+${row.adjustments}` : row.adjustments}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {filteredRows.length === 0 && (
+            <div className="text-center py-12 text-slate-400 text-xs">
+              No product ledger data for this date.
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Movement Audit Trail List */
+        <div className="space-y-2">
+          {movements.map((m) => (
+            <div
+              key={m.id}
+              className="bg-slate-900 border border-slate-800 rounded-2xl p-3 shadow-sm text-xs space-y-1"
+            >
+              <div className="flex items-center justify-between">
+                <span
+                  className={`text-[10px] uppercase font-bold px-2 py-0.2 rounded ${
+                    m.movement_type === 'PURCHASE'
+                      ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                      : m.movement_type === 'SALE'
+                      ? 'bg-blue-950 text-blue-400 border border-blue-800'
+                      : m.movement_type === 'CUSTOMER_RETURN'
+                      ? 'bg-green-950 text-green-400 border border-green-800'
+                      : m.movement_type === 'DAMAGE_LOSS'
+                      ? 'bg-red-950 text-red-400 border border-red-800'
+                      : 'bg-amber-950 text-amber-400 border border-amber-800'
+                  }`}
+                >
+                  {m.movement_type}
+                </span>
+                <span className="text-[10px] text-slate-500">
+                  {new Date(m.created_at).toLocaleTimeString('en-IN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
+              </div>
+
+              <div className="flex items-baseline justify-between pt-1">
+                <div className="min-w-0">
+                  <div className="font-bold text-white truncate">{m.product_name}</div>
+                  <div className="text-[11px] text-slate-400">{m.reason || 'Movement'}</div>
+                  <div className="text-[10px] text-slate-500">By {m.user_name}</div>
+                </div>
+
+                <div className="text-right shrink-0">
+                  <span
+                    className={`text-sm font-black ${
+                      m.quantity_change > 0 ? 'text-emerald-400' : 'text-red-400'
+                    }`}
+                  >
+                    {m.quantity_change > 0 ? `+${m.quantity_change}` : m.quantity_change}
+                  </span>
+                  <div className="text-[10px] text-slate-400">
+                    {m.quantity_before} → {m.quantity_after}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {movements.length === 0 && (
+            <div className="text-center py-12 text-slate-400 text-xs">
+              No stock movements recorded yet.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
