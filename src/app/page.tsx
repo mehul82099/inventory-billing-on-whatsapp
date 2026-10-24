@@ -17,6 +17,8 @@ import { LoginView } from '@/components/LoginView';
 import { AiBillingModal } from '@/components/AiBillingModal';
 import { InvoiceModal } from '@/components/InvoiceModal';
 import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
+import { apiFetch } from '@/lib/api';
+import { getSupabaseBrowser } from '@/lib/supabase-browser';
 
 export default function Home() {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -44,16 +46,33 @@ export default function Home() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Restore session from localStorage if present
-    try {
-      const savedUser = localStorage.getItem('mb_user');
-      const savedShop = localStorage.getItem('mb_shop');
-      if (savedUser && savedShop) {
-        setUser(JSON.parse(savedUser));
-        setShop(JSON.parse(savedShop));
+    // Restore session: Supabase Auth in backend mode, localStorage in demo mode
+    const supabaseClient = getSupabaseBrowser();
+    if (supabaseClient) {
+      supabaseClient.auth.getSession().then(async ({ data }) => {
+        if (!data.session) return;
+        try {
+          const res = await apiFetch('/api/auth/session');
+          if (res.ok) {
+            const d = await res.json();
+            setUser(d.user);
+            setShop(d.shop);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      });
+    } else {
+      try {
+        const savedUser = localStorage.getItem('mb_user');
+        const savedShop = localStorage.getItem('mb_shop');
+        if (savedUser && savedShop) {
+          setUser(JSON.parse(savedUser));
+          setShop(JSON.parse(savedShop));
+        }
+      } catch (e) {
+        console.error(e);
       }
-    } catch (e) {
-      console.error(e);
     }
 
     return () => {
@@ -66,9 +85,9 @@ export default function Home() {
   const fetchData = async () => {
     try {
       const [prodRes, custRes, settingsRes] = await Promise.all([
-        fetch('/api/products'),
-        fetch('/api/customers'),
-        fetch('/api/settings'),
+        apiFetch('/api/products'),
+        apiFetch('/api/customers'),
+        apiFetch('/api/settings'),
       ]);
 
       const prodData = await prodRes.json();
@@ -109,6 +128,8 @@ export default function Home() {
 
   const handleLogout = () => {
     setUser(null);
+    const supabaseClient = getSupabaseBrowser();
+    if (supabaseClient) supabaseClient.auth.signOut();
     try {
       localStorage.removeItem('mb_user');
       localStorage.removeItem('mb_shop');
@@ -132,6 +153,12 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+      {process.env.NEXT_PUBLIC_DEMO_MODE === 'true' && (
+        <div className="bg-amber-500 text-slate-950 text-center text-[11px] font-bold py-1.5 px-3">
+          DEMO MODE - data is temporary and resets automatically. Do not enter real business data.
+        </div>
+      )}
+
       {/* PWA Install Banner */}
       <PwaInstallPrompt />
 
