@@ -142,10 +142,10 @@ export default function Home() {
     try {
       localStorage.removeItem('mb_user');
       localStorage.removeItem('mb_shop');
-      // Sign-out never carries an uncertain bill across accounts.
-      for (const k of Object.keys(sessionStorage)) {
-        if (k.startsWith('pending_bill:')) sessionStorage.removeItem(k);
-      }
+      // NB: pending_bill:* recovery records are intentionally kept - they are
+      // scoped to user+shop and are the only way to recover an uncertain
+      // outcome after signing back in. Cross-account replay is blocked by
+      // the scope check in BillingView.
     } catch (e) {}
   };
 
