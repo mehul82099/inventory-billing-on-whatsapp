@@ -141,8 +141,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span>Sales Revenue</span>
             <TrendingUp className="w-4 h-4 text-emerald-400" />
           </div>
-          <div className="text-xl font-black text-white">
-            ₹{m.salesToday.toLocaleString('en-IN')}
+          <div className="text-xl font-black text-white num">
+            â¹{m.salesToday.toLocaleString('en-IN')}
           </div>
           <div className="text-[11px] text-emerald-400 font-medium">
             {m.billsCount} bills generated
@@ -155,7 +155,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span>Units Sold</span>
             <Package className="w-4 h-4 text-blue-400" />
           </div>
-          <div className="text-xl font-black text-white">{m.totalUnitsSold}</div>
+          <div className="text-xl font-black text-white num">{m.totalUnitsSold}</div>
           <div className="text-[11px] text-slate-400">Accessories & parts</div>
         </div>
 
@@ -166,8 +166,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span>Gross Profit</span>
               <DollarSign className="w-4 h-4 text-emerald-400" />
             </div>
-            <div className="text-xl font-black text-emerald-400">
-              ₹{m.totalGrossProfit.toLocaleString('en-IN')}
+            <div className="text-xl font-black text-emerald-400 num">
+              â¹{m.totalGrossProfit.toLocaleString('en-IN')}
             </div>
             <div className="text-[11px] text-slate-400">Based on purchase costs</div>
           </div>
@@ -177,7 +177,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span>Stock Received</span>
               <Package className="w-4 h-4 text-purple-400" />
             </div>
-            <div className="text-xl font-black text-white">{m.stockReceivedToday}</div>
+            <div className="text-xl font-black text-white num">{m.stockReceivedToday}</div>
             <div className="text-[11px] text-slate-400">Items received today</div>
           </div>
         )}
@@ -191,7 +191,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span>Stock Alerts</span>
             <AlertTriangle className="w-4 h-4 text-amber-400" />
           </div>
-          <div className="text-xl font-black text-amber-400">
+          <div className="text-xl font-black text-amber-400 num">
             {m.lowStockCount + m.outOfStockCount}
           </div>
           <div className="text-[11px] text-slate-400">
@@ -210,8 +210,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
               <QrCode className="w-3.5 h-3.5 text-blue-400" /> UPI / QR
             </div>
-            <div className="text-base font-bold text-white">
-              ₹{m.upiCollected.toLocaleString('en-IN')}
+            <div className="text-base font-bold text-white num">
+              â¹{m.upiCollected.toLocaleString('en-IN')}
             </div>
           </div>
 
@@ -219,8 +219,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
               <Banknote className="w-3.5 h-3.5 text-emerald-400" /> Cash
             </div>
-            <div className="text-base font-bold text-white">
-              ₹{m.cashCollected.toLocaleString('en-IN')}
+            <div className="text-base font-bold text-white num">
+              â¹{m.cashCollected.toLocaleString('en-IN')}
             </div>
           </div>
 
@@ -228,8 +228,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
               <Users className="w-3.5 h-3.5 text-amber-400" /> Credit Dues
             </div>
-            <div className="text-base font-bold text-amber-300">
-              ₹{m.outstandingBalances.toLocaleString('en-IN')}
+            <div className="text-base font-bold text-amber-300 num">
+              â¹{m.outstandingBalances.toLocaleString('en-IN')}
             </div>
           </div>
         </div>
@@ -248,14 +248,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="grid grid-cols-2 gap-3 pt-1">
             <div className="p-3 rounded-xl bg-slate-800/40 border border-slate-700/40">
               <span className="text-[11px] text-slate-400 block">Inventory at Cost Value</span>
-              <span className="text-lg font-black text-white">
-                ₹{m.inventoryCostValuation.toLocaleString('en-IN')}
+              <span className="text-lg font-black text-white num">
+                â¹{m.inventoryCostValuation.toLocaleString('en-IN')}
               </span>
             </div>
             <div className="p-3 rounded-xl bg-slate-800/40 border border-slate-700/40">
               <span className="text-[11px] text-slate-400 block">Potential Retail Value</span>
-              <span className="text-lg font-black text-emerald-400">
-                ₹{m.inventoryRetailValuation.toLocaleString('en-IN')}
+              <span className="text-lg font-black text-emerald-400 num">
+                â¹{m.inventoryRetailValuation.toLocaleString('en-IN')}
               </span>
             </div>
           </div>
@@ -306,7 +306,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <div className="text-[10px] text-slate-400">{emp.billsCount} bills today</div>
                 </div>
                 <div className="font-bold text-emerald-400">
-                  ₹{emp.revenue.toLocaleString('en-IN')}
+                  â¹{emp.revenue.toLocaleString('en-IN')}
                 </div>
               </div>
             ))}
@@ -351,13 +351,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </span>
                 </div>
                 <div className="text-[11px] text-slate-400 truncate">
-                  {inv.customer_name} • {inv.items.length} items • {inv.user_name.split(' ')[0]}
+                  {inv.customer_name} â¢ {inv.items.length} items â¢ {inv.user_name.split(' ')[0]}
                 </div>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
                 <span className="font-black text-sm text-emerald-400">
-                  ₹{inv.total_amount}
+                  â¹{inv.total_amount}
                 </span>
                 <button
                   onClick={() => {
