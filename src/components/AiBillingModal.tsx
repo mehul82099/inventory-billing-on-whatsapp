@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiFetch } from '@/lib/api';
 import { Product } from '@/types';
 import { ParsedAiBill, ParsedBillItem } from '@/lib/ai-parser';
 import {
@@ -79,7 +80,7 @@ export const AiBillingModal: React.FC<AiBillingModalProps> = ({
     setError(null);
 
     try {
-      const res = await fetch('/api/ai-bill', {
+      const res = await apiFetch('/api/ai-bill', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt }),
