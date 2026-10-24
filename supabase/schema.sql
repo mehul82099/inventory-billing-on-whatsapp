@@ -392,3 +392,114 @@ begin
   return to_jsonb(v_ret);
 end;
 $$;
+
+-- Purchase (stock-in) in ONE transaction: per-item restock + movements +
+-- purchase insert + idempotency record. Unknown product aborts everything.
+create or replace function create_purchase_tx(p_shop_id text, p_idempotency_key text, p_input jsonb)
+returns jsonb
+language plpgsql as $$
+declare
+  v_prod products%rowtype;
+  v_item jsonb;
+  v_items jsonb := '[]'::jsonb;
+  v_subtotal numeric := 0;
+  v_now timestamptz := now();
+  v_ms bigint := (extract(epoch from v_now)*1000)::bigint;
+  v_pur_id text := 'pur-' || v_ms::text || floor(random()*10000)::int::text;
+  v_qty_before integer;
+  v_qty_after integer;
+  v_supplier_name text;
+  v_stored jsonb;
+  v_pur purchases%rowtype;
+begin
+  if p_idempotency_key is not null and p_idempotency_key <> '' then
+    select response into v_stored from idempotency_keys
+     where shop_id = p_shop_id and key = p_idempotency_key and endpoint = 'create_purchase';
+    if found and v_stored is not null then
+      return v_stored;
+    end if;
+    insert into idempotency_keys (shop_id, key, endpoint) values (p_shop_id, p_idempotency_key, 'create_purchase');
+  end if;
+
+  for v_item in select * from jsonb_array_elements(p_input->'items') loop
+    select * into v_prod from products where shop_id = p_shop_id and id = v_item->>'product_id' for update;
+    if not found then raise exception 'Product ID % not found in catalog.', v_item->>'product_id'; end if;
+    v_qty_before := v_prod.current_quantity;
+    v_qty_after := v_qty_before + (v_item->>'quantity_received')::integer;
+    update products set current_quantity = v_qty_after,
+                        purchase_cost = coalesce((v_item->>'unit_cost')::numeric, purchase_cost),
+                        updated_at = v_now
+     where shop_id = p_shop_id and id = v_prod.id;
+    v_subtotal := v_subtotal + (v_item->>'quantity_received')::integer * coalesce((v_item->>'unit_cost')::numeric, 0);
+    v_items := v_items || jsonb_build_object(
+      'id', 'pi-' || v_ms::text || floor(random()*10000)::int::text || '-' || v_prod.id,
+      'product_id', v_prod.id, 'product_name', v_prod.name,
+      'quantity_received', (v_item->>'quantity_received')::integer,
+      'unit_cost', coalesce((v_item->>'unit_cost')::numeric, 0),
+      'line_total', (v_item->>'quantity_received')::integer * coalesce((v_item->>'unit_cost')::numeric, 0));
+    insert into stock_movements (id, shop_id, product_id, product_name, user_id, user_name, movement_type, quantity_change, quantity_before, quantity_after, unit_cost, reason, created_at)
+    values ('mov-' || v_ms::text || floor(random()*10000)::int::text, p_shop_id, v_prod.id, v_prod.name,
+            p_input->>'user_id', p_input->>'user_name', 'PURCHASE', (v_item->>'quantity_received')::integer, v_qty_before, v_qty_after,
+            coalesce((v_item->>'unit_cost')::numeric, 0), 'Stock In: Inv #' || coalesce(nullif(p_input->>'supplier_invoice_number',''),'N/A'), v_now);
+  end loop;
+
+  if p_input->>'supplier_id' is not null and p_input->>'supplier_id' <> '' then
+    select name into v_supplier_name from suppliers where shop_id = p_shop_id and id = p_input->>'supplier_id';
+  end if;
+
+  insert into purchases (id, shop_id, supplier_id, supplier_name, user_id, user_name, supplier_invoice_number,
+                         purchase_date, items, subtotal_amount, shipping_expenses, tax_amount, total_amount, notes, created_at)
+  values (v_pur_id, p_shop_id, nullif(p_input->>'supplier_id',''), v_supplier_name, p_input->>'user_id', p_input->>'user_name',
+          nullif(p_input->>'supplier_invoice_number',''),
+          coalesce(nullif(p_input->>'purchase_date','')::date, v_now::date), v_items, v_subtotal,
+          coalesce((p_input->>'shipping_expenses')::numeric,0), coalesce((p_input->>'tax_amount')::numeric,0),
+          v_subtotal + coalesce((p_input->>'shipping_expenses')::numeric,0) + coalesce((p_input->>'tax_amount')::numeric,0),
+          nullif(p_input->>'notes',''), v_now)
+  returning * into v_pur;
+
+  if p_idempotency_key is not null and p_idempotency_key <> '' then
+    update idempotency_keys set response = to_jsonb(v_pur) where shop_id = p_shop_id and key = p_idempotency_key;
+  end if;
+  return to_jsonb(v_pur);
+end;
+$$;
+
+-- Invoice cancellation in ONE transaction: atomic status claim, restock,
+-- movements. A second cancel (even concurrent) sees the claim and aborts.
+create or replace function cancel_invoice_tx(p_shop_id text, p_invoice_id text, p_user_id text, p_user_name text, p_reason text)
+returns jsonb
+language plpgsql as $$
+declare
+  v_inv invoices%rowtype;
+  v_item jsonb;
+  v_now timestamptz := now();
+  v_ms bigint := (extract(epoch from v_now)*1000)::bigint;
+  v_qty_before integer;
+  v_qty_after integer;
+  v_prod products%rowtype;
+begin
+  update invoices set status = 'CANCELLED', cancellation_reason = p_reason, cancelled_by = p_user_id, cancelled_at = v_now, updated_at = v_now
+   where shop_id = p_shop_id and id = p_invoice_id and status <> 'CANCELLED'
+  returning * into v_inv;
+  if not found then
+    select * into v_inv from invoices where shop_id = p_shop_id and id = p_invoice_id;
+    if not found then raise exception 'Invoice not found'; end if;
+    raise exception 'Invoice is already cancelled';
+  end if;
+
+  for v_item in select * from jsonb_array_elements(coalesce(v_inv.items, '[]'::jsonb)) loop
+    if v_item->>'product_id' is null then continue; end if;
+    select * into v_prod from products where shop_id = p_shop_id and id = v_item->>'product_id' for update;
+    if not found then continue; end if;
+    v_qty_before := v_prod.current_quantity;
+    v_qty_after := v_qty_before + (v_item->>'quantity')::integer;
+    update products set current_quantity = v_qty_after, updated_at = v_now where shop_id = p_shop_id and id = v_prod.id;
+    insert into stock_movements (id, shop_id, product_id, product_name, user_id, user_name, movement_type, quantity_change, quantity_before, quantity_after, unit_cost, reference_id, reason, created_at)
+    values ('mov-' || v_ms::text || floor(random()*10000)::int::text, p_shop_id, v_prod.id, v_prod.name,
+            p_user_id, p_user_name, 'CUSTOMER_RETURN', (v_item->>'quantity')::integer, v_qty_before, v_qty_after,
+            coalesce((v_item->>'cost_price_at_sale')::numeric, 0), v_inv.id, 'Bill cancelled #' || v_inv.invoice_number || ': ' || p_reason, v_now);
+  end loop;
+
+  return to_jsonb(v_inv);
+end;
+$$;
