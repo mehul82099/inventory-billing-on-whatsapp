@@ -85,7 +85,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     setCancelling(true);
 
     try {
-      const res = await fetch(`/api/invoices/${cancelModalInvoice.id}/cancel`, {
+      const res = await apiFetch(`/api/invoices/${cancelModalInvoice.id}/cancel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
