@@ -35,6 +35,9 @@ export async function requireShop(request: Request): Promise<AuthContext | NextR
   }
   const admin = getSupabaseAdmin();
   const { data, error } = await admin.auth.getUser(token);
+  if (error || !data?.user?.id) {
+    return NextResponse.json({ error: 'Session expired. Please sign in again.' }, { status: 401 });
+  }
   // Explicit column list instead of select('*'): wildcard expansion returned
   // inconsistent results from the hosted API during its schema-cache incident;
   // named columns keep the profile lookup deterministic.
