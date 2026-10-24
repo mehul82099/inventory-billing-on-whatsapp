@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { SupabaseDb } from '@/lib/db-supabase';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,27 +64,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, declined: true });
     }
 
-    // Accept: consent is proven by the authenticated email match above.
-    // Never re-parent an account that already belongs to a shop.
-    const { data: existing } = await admin.from('users').select('id,shop_id').eq('id', auth.uid).maybeSingle();
-    if (existing) {
-      return NextResponse.json({ error: 'Your account already belongs to a shop' }, { status: 409 });
-    }
-    const db = new SupabaseDb(admin, inv.shop_id);
-    const member = await db.createStaffProfile({
-      id: auth.uid,
-      email: auth.email,
-      full_name: inv.full_name,
-      can_receive_stock: inv.can_receive_stock,
-      can_apply_custom_discount: inv.can_apply_custom_discount,
-      can_cancel_bills: inv.can_cancel_bills,
-      can_view_purchase_cost: inv.can_view_purchase_cost,
+    // Accept: one DB transaction claims the invitation and creates the
+    // membership (row lock inside accept_staff_invitation) - simultaneous or
+    // cross-shop accepts cannot race into duplicate or re-parented members.
+    const { data: member, error: acceptErr } = await admin.rpc('accept_staff_invitation', {
+      p_invitation_id: invitationId,
+      p_uid: auth.uid,
+      p_email: auth.email,
     });
-    await admin
-      .from('staff_invitations')
-      .update({ status: 'accepted', accepted_at: new Date().toISOString(), accepted_by: auth.uid })
-      .eq('id', invitationId)
-      .eq('status', 'pending');
+    if (acceptErr) {
+      const msg = String(acceptErr.message || '');
+      const status = /already been answered/.test(msg) ? 409 : /already belongs to a shop/.test(msg) ? 409 : /expired/.test(msg) ? 410 : /different account/.test(msg) ? 403 : 400;
+      return NextResponse.json({ error: msg.replace('accept_staff_invitation: ', '') }, { status });
+    }
     return NextResponse.json({ success: true, member });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 });
