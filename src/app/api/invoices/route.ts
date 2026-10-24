@@ -13,6 +13,11 @@ export async function GET(request: Request) {
     const userId = searchParams.get('userId') || undefined;
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!, 10) : undefined;
 
+    const idemKey = searchParams.get('idem_key') || undefined;
+    if (idemKey) {
+      const stored = await dbService.lookupIdempotencyKey(idemKey, 'create_invoice');
+      return NextResponse.json({ found: !!stored?.response, invoice: stored?.response || null });
+    }
     const invoices = await dbService.getInvoices({ search, user_id: userId, limit });
     return NextResponse.json({ invoices });
   } catch (err: any) {
