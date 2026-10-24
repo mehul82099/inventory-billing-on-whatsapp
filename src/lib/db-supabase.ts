@@ -163,7 +163,8 @@ export class SupabaseDb {
   async saveProduct(productData: Partial<Product> & { name: string; selling_price: number }): Promise<Product> {
     if (productData.id) {
       const existing = await this.getProductById(productData.id);
-      if (existing) {
+      if (!existing) throw new Error('Product not found');
+      if (true) {
         const updates: any = { ...productData, updated_at: new Date().toISOString() };
         delete updates.id;
         delete updates.shop_id;
@@ -469,8 +470,18 @@ export class SupabaseDb {
       created_at: now,
       updated_at: now,
     };
-    const { data, error } = await this.client.from('invoices').insert(newInvoice).select().single();
-    throwIf(error, 'createInvoice');
+    let data: any, error: any;
+    try {
+      const res = await this.client.from('invoices').insert(newInvoice).select().single();
+      data = res.data; error = res.error;
+    } catch (e) { error = e; }
+    if (error) {
+      // Compensate: restore all deducted stock so a failed bill never leaks inventory.
+      for (const it of invoiceData.items) {
+        try { await this.adjustStock(it.product_id, it.quantity); } catch { /* best effort */ }
+      }
+      throwIf(error, 'createInvoice');
+    }
     return data as Invoice;
   }
 
@@ -486,12 +497,16 @@ export class SupabaseDb {
     if (inv.status === 'CANCELLED') throw new Error('Invoice is already cancelled');
 
     const now = new Date().toISOString();
-    const { error: updErr } = await this.client
+    // Atomic claim: only one concurrent cancel can flip the status.
+    const { data: claimed, error: updErr } = await this.client
       .from('invoices')
       .update({ status: 'CANCELLED', cancellation_reason: reason, cancelled_by: user_id, cancelled_at: now, updated_at: now })
       .eq('shop_id', this.shopId)
-      .eq('id', invoiceId);
+      .eq('id', invoiceId)
+      .neq('status', 'CANCELLED')
+      .select('id');
     throwIf(updErr, 'cancelInvoice(update)');
+    if (!claimed || claimed.length === 0) throw new Error('Invoice is already cancelled');
 
     for (const item of inv.items || []) {
       if (!item.product_id) continue;
