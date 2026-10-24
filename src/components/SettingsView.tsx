@@ -83,11 +83,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to add staff');
-      setStaffMessage(
-        data.invite_sent
-          ? `Invitation email sent to ${newStaff.email}. They set their own password from the link - no shared passwords.`
-          : `${newStaff.email} added to your team. They sign in with their existing account.`
-      );
+      setStaffMessage(`Invitation created for ${newStaff.email}. New accounts get an email link to set their own password; existing accounts see the invitation at sign-in. They must accept before joining.`);
       setNewStaff({ full_name: '', email: '', can_receive_stock: false, can_apply_custom_discount: false, can_cancel_bills: false, can_view_purchase_cost: false });
       onRefresh();
     } catch (err: any) {
