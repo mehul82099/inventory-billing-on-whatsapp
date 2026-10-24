@@ -141,6 +141,19 @@ export class SupabaseDb {
     throwIf(error, 'updateProductQty');
   }
 
+  // Atomic stock adjustment via RPC - safe under concurrent invoices.
+  private async adjustStock(productId: string, delta: number, requireNonNegative = false): Promise<{ ok: boolean; newQty: number | null }> {
+    const { data, error } = await this.client.rpc('adjust_stock', {
+      p_shop_id: this.shopId,
+      p_product_id: productId,
+      p_delta: delta,
+      p_require_nonnegative: requireNonNegative,
+    });
+    throwIf(error, 'adjustStock');
+    const row = Array.isArray(data) ? data[0] : data;
+    return { ok: Boolean(row?.ok), newQty: row?.new_qty === undefined || row?.new_qty === null ? null : Number(row.new_qty) };
+  }
+
   private async insertMovement(m: Omit<StockMovement, 'id' | 'shop_id'> & { id?: string }) {
     const row = { ...m, id: m.id || newId('mov'), shop_id: this.shopId };
     const { error } = await this.client.from('stock_movements').insert(row);
@@ -237,9 +250,12 @@ export class SupabaseDb {
       if (!prod) continue;
       const lineTotal = item.quantity_received * item.unit_cost;
       subtotal += lineTotal;
-      const qtyBefore = Number(prod.current_quantity);
-      const qtyAfter = qtyBefore + item.quantity_received;
-      await this.updateProductQty(prod.id, qtyAfter, { purchase_cost: item.unit_cost });
+      const adj = await this.adjustStock(prod.id, item.quantity_received);
+      const qtyAfter = adj.newQty ?? Number(prod.current_quantity) + item.quantity_received;
+      const qtyBefore = qtyAfter - item.quantity_received;
+      if (item.unit_cost !== undefined) {
+        await this.client.from('products').update({ purchase_cost: item.unit_cost, updated_at: new Date().toISOString() }).eq('shop_id', this.shopId).eq('id', prod.id);
+      }
       purchaseItems.push({
         id: `${newId('pi')}-${item.product_id}`,
         product_id: item.product_id,
@@ -314,19 +330,12 @@ export class SupabaseDb {
   }): Promise<Invoice> {
     const shop = await this.getShop();
 
-    // 1. Validate stock
+    // 1. Resolve products (stock is decremented atomically in step 2)
     const prods: Record<string, Product> = {};
     for (const item of invoiceData.items) {
       const prod = await this.getProductById(item.product_id);
       if (!prod) throw new Error(`Product ID ${item.product_id} not found in catalog.`);
       prods[item.product_id] = prod;
-      if (!shop.allow_negative_stock && !invoiceData.allow_negative_override) {
-        if (Number(prod.current_quantity) < item.quantity) {
-          throw new Error(
-            `Insufficient stock for "${prod.name}". Available: ${prod.current_quantity}, Requested: ${item.quantity}. Override requires authorization.`
-          );
-        }
-      }
     }
 
     const now = new Date().toISOString();
@@ -340,9 +349,19 @@ export class SupabaseDb {
       const itemDisc = Number(item.discount_amount) || 0;
       const lineTotal = item.quantity * item.unit_price - itemDisc;
       subtotal += lineTotal;
-      const qtyBefore = Number(prod.current_quantity);
-      const qtyAfter = qtyBefore - item.quantity;
-      await this.updateProductQty(prod.id, qtyAfter);
+      const dec = await this.adjustStock(prod.id, -item.quantity, !shop.allow_negative_stock && !invoiceData.allow_negative_override);
+      if (!dec.ok) {
+        // Roll back any stock already deducted for this invoice.
+        for (const it of invoiceData.items) {
+          if (it.product_id === item.product_id) break;
+          try { await this.adjustStock(it.product_id, it.quantity); } catch { /* best effort */ }
+        }
+        throw new Error(
+          `Insufficient stock for "${prod.name}". Available: ${dec.newQty ?? 0}, Requested: ${item.quantity}. Override requires authorization.`
+        );
+      }
+      const qtyAfter = dec.newQty ?? 0;
+      const qtyBefore = qtyAfter + item.quantity;
       invoiceItems.push({
         id: `${newId('ii')}-${prod.id}`,
         product_id: prod.id,
@@ -478,9 +497,9 @@ export class SupabaseDb {
       if (!item.product_id) continue;
       const prod = await this.getProductById(item.product_id);
       if (!prod) continue;
-      const qtyBefore = Number(prod.current_quantity);
-      const qtyAfter = qtyBefore + item.quantity;
-      await this.updateProductQty(prod.id, qtyAfter);
+      const adj = await this.adjustStock(prod.id, item.quantity);
+      const qtyAfter = adj.newQty ?? Number(prod.current_quantity) + item.quantity;
+      const qtyBefore = qtyAfter - item.quantity;
       await this.insertMovement({
         product_id: prod.id,
         product_name: prod.name,
@@ -578,9 +597,10 @@ export class SupabaseDb {
     const { error } = await this.client.from('customer_returns').insert(record);
     throwIf(error, 'recordCustomerReturn');
 
-    const qty = Number(prod.current_quantity);
+    let qty = Number(prod.current_quantity);
     if (returnData.condition === 'SELLABLE') {
-      await this.updateProductQty(prod.id, qty + returnData.quantity);
+      const adj = await this.adjustStock(prod.id, returnData.quantity);
+      qty = (adj.newQty ?? qty + returnData.quantity) - returnData.quantity;
       await this.insertMovement({
         product_id: prod.id,
         product_name: prod.name,
