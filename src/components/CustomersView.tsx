@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { apiFetch } from '@/lib/api';
 import { Customer, Invoice, UserProfile, Shop } from '@/types';
 import {
   Users,
@@ -42,8 +43,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     try {
       setLoading(true);
       const [custRes, invRes] = await Promise.all([
-        fetch('/api/customers'),
-        fetch('/api/invoices'),
+        apiFetch('/api/customers'),
+        apiFetch('/api/invoices'),
       ]);
       const custData = await custRes.json();
       const invData = await invRes.json();
