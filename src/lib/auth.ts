@@ -41,6 +41,8 @@ export async function requireShop(request: Request): Promise<AuthContext | NextR
     return NextResponse.json({ error: 'Session expired. Please sign in again.' }, { status: 401 });
   }
   // TEMP server-side probe: exact request URL + raw result of the profile lookup
+  const all = await admin.from('users').select('id,email').limit(5);
+  console.warn('requireShop users-visible', { rows: (all.data || []).map((r: any) => r.id + '|' + r.email), err: all.error?.code || null });
   const q = admin.from('users').select('*').eq('id', data.user.id).maybeSingle();
   console.warn('requireShop profile-query', { url: (q as any).url ? (q as any).url.toString() : 'n/a' });
   const { data: profile, error: profileError } = await q;
