@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     });
   } catch (err: any) {
     const msg = err.message || 'Error creating invoice';
-    const status = /not found/i.test(msg) ? 404 : 400;
+    const status = /IDEMPOTENCY_CONFLICT/.test(msg) ? 409 : /not found/i.test(msg) ? 404 : 400;
     return NextResponse.json({ error: msg }, { status });
   }
 }
