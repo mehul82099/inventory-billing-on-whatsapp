@@ -3,14 +3,18 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 15, 23, 42;
-  --background-rgb: 248, 250, 252;
+  --foreground-rgb: 22, 21, 19;
+  --background-rgb: 242, 239, 231;
 }
 
 body {
   color: rgb(var(--foreground-rgb));
-  background: rgb(var(--background-rgb));
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Paper POS: warm paper field with a faint top-light falloff */
+  background:
+    radial-gradient(120% 40% at 50% -8%, rgba(22, 21, 19, 0.05), transparent 62%),
+    rgb(var(--background-rgb));
+  background-attachment: fixed;
+  font-family: Archivo, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: contain;
 }
@@ -20,6 +24,19 @@ input, select, textarea, button {
   font-size: 16px; /* Prevents auto-zoom on iOS & Android Chrome */
 }
 
+/* Big editorial numerals (KODO-style display type) */
+.num {
+  font-family: "Archivo Black", Archivo, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* Hairline ink divider */
+.seam {
+  height: 1px;
+  border: 0;
+  background: linear-gradient(90deg, transparent, rgba(22, 21, 19, 0.35), transparent);
+}
+
 /* Hide scrollbars on mobile horizontal chips */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
@@ -27,6 +44,19 @@ input, select, textarea, button {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Slim paper scrollbars elsewhere */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d9d2bd;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* Print styles for thermal printer & standard paper */
