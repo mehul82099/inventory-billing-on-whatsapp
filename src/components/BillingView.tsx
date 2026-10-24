@@ -50,21 +50,23 @@ export const BillingView: React.FC<BillingViewProps> = ({
   const [pendingBill, setPendingBill] = useState<{ key: string; payload: any; ts: number } | null>(null);
   const [recoveredInvoice, setRecoveredInvoice] = useState<any | null>(null);
 
+  const pendingKey = `pending_bill:${user.shop_id}:${user.id}`;
+
   // Recover an interrupted bill attempt that survived a reload: a finalized
   // bill whose outcome never reached the client must be reviewed, not
   // silently re-billed under a fresh key.
   useEffect(() => {
     try {
-      const raw = sessionStorage.getItem('pending_bill');
+      const raw = sessionStorage.getItem(pendingKey);
       if (!raw) return;
       const pending = JSON.parse(raw);
-      if (!pending?.key) { sessionStorage.removeItem('pending_bill'); return; }
+      if (!pending?.key || pending.user_id !== user.id || pending.shop_id !== user.shop_id) { return; }
       (async () => {
         try {
           const res = await apiFetch('/api/invoices?idem_key=' + encodeURIComponent(pending.key));
           const data = await res.json();
           if (res.ok && data.found && data.invoice) {
-            sessionStorage.removeItem('pending_bill');
+            sessionStorage.removeItem(pendingKey);
             billKeyRef.current = null;
             setRecoveredInvoice(data.invoice);
           } else {
@@ -90,13 +92,13 @@ export const BillingView: React.FC<BillingViewProps> = ({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create invoice');
-      sessionStorage.removeItem('pending_bill');
+      sessionStorage.removeItem(pendingKey);
       setPendingBill(null);
       billKeyRef.current = null;
       onInvoiceCreated(data.invoice);
     } catch (err: any) {
       if (/already used with a different bill/i.test(err?.message || '')) {
-        sessionStorage.removeItem('pending_bill');
+        sessionStorage.removeItem(pendingKey);
         setPendingBill(null);
         billKeyRef.current = null;
       }
@@ -106,10 +108,24 @@ export const BillingView: React.FC<BillingViewProps> = ({
     }
   };
 
-  const discardPendingBill = () => {
-    sessionStorage.removeItem('pending_bill');
-    setPendingBill(null);
-    billKeyRef.current = null;
+  const discardPendingBill = async () => {
+    if (!pendingBill) return;
+    try {
+      const res = await apiFetch('/api/invoices?idem_key=' + encodeURIComponent(pendingBill.key));
+      const data = await res.json();
+      if (res.ok && data.found && data.invoice) {
+        sessionStorage.removeItem(pendingKey);
+        setPendingBill(null);
+        billKeyRef.current = null;
+        setRecoveredInvoice(data.invoice);
+        return;
+      }
+      sessionStorage.removeItem(pendingKey);
+      setPendingBill(null);
+      billKeyRef.current = null;
+    } catch {
+      setErrorMsg('Could not verify whether the previous bill was saved - kept it for review instead of discarding.');
+    }
   };
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -292,7 +308,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
       payload.idempotency_key = billKeyRef.current;
       // Durable retry state: survives a reload so an uncertain outcome can be
       // recovered instead of silently re-billed under a fresh key.
-      try { sessionStorage.setItem('pending_bill', JSON.stringify({ key: billKeyRef.current, payload, ts: Date.now() })); } catch {}
+      try { sessionStorage.setItem(pendingKey, JSON.stringify({ key: billKeyRef.current, payload, ts: Date.now(), user_id: user.id, shop_id: user.shop_id })); } catch {}
 
       const res = await apiFetch('/api/invoices', {
         method: 'POST',
@@ -305,7 +321,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
 
       // New bill next time: mint a fresh idempotency key.
       billKeyRef.current = null;
-      try { sessionStorage.removeItem('pending_bill'); } catch {}
+      try { sessionStorage.removeItem(pendingKey); } catch {}
       setPendingBill(null);
 
       // Clear cart
@@ -320,7 +336,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
     } catch (err: any) {
       if (/already used with a different bill/i.test(err?.message || '')) {
         billKeyRef.current = null;
-        try { sessionStorage.removeItem('pending_bill'); } catch {}
+        try { sessionStorage.removeItem(pendingKey); } catch {}
         setPendingBill(null);
       }
       setErrorMsg(err.message || 'Error completing sale');
