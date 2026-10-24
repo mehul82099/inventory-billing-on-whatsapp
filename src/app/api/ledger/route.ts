@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
-import { dbService } from '@/lib/db';
+import { getRequestContext } from '@/lib/backend';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
+    const { context, response } = await getRequestContext(request);
+    if (response) return response;
+    const dbService = context!.db;
   try {
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date') || undefined;
@@ -11,8 +14,8 @@ export async function GET(request: Request) {
     const startDate = searchParams.get('startDate') || undefined;
     const endDate = searchParams.get('endDate') || undefined;
 
-    const ledger = dbService.getDailyLedger(date);
-    const movements = dbService.getStockMovements({
+    const ledger = await dbService.getDailyLedger(date);
+    const movements = await dbService.getStockMovements({
       product_id: productId,
       startDate,
       endDate,
