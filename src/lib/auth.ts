@@ -33,6 +33,8 @@ export async function requireShop(request: Request): Promise<AuthContext | NextR
     .eq('id', data.user.id)
     .maybeSingle();
   if (profileError || !profile) {
+    // Server-side diagnostic only (sanitized): distinguishes lookup error vs missing row.
+    console.warn('requireShop profile lookup failed', { hadError: Boolean(profileError), code: profileError?.code || null, found: Boolean(profile) });
     return NextResponse.json({ error: 'Account setup incomplete. Please finish registration.' }, { status: 403 });
   }
   if (!profile.is_active) {
