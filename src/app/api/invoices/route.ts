@@ -28,6 +28,11 @@ export async function POST(request: Request) {
     const body = await request.json();
     if (context!.user) { body.user_id = context!.user.userId; body.user_name = context!.user.fullName; }
 
+    const totalDiscount = Number(body.discount_amount || 0) + (Array.isArray(body.items) ? body.items.reduce((sum: number, i: any) => sum + Number(i.discount_amount || 0), 0) : 0);
+    if (totalDiscount > 0 && context!.user && context!.user.role !== 'owner' && !(context!.user.profile as any)?.can_apply_custom_discount) {
+      return NextResponse.json({ error: 'You do not have permission to apply custom discounts' }, { status: 403 });
+    }
+
     if (!body.items || !Array.isArray(body.items) || body.items.length === 0) {
       return NextResponse.json({ error: 'At least one item is required to generate a bill' }, { status: 400 });
     }
