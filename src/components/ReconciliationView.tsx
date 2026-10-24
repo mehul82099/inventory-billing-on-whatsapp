@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiFetch } from '@/lib/api';
 import { Product, UserProfile } from '@/types';
 import {
   Scale,
@@ -47,7 +48,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
     setMessage(null);
 
     try {
-      const res = await fetch('/api/reconciliation', {
+      const res = await apiFetch('/api/reconciliation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -80,7 +81,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
     setMessage(null);
 
     try {
-      const res = await fetch('/api/reconciliation', {
+      const res = await apiFetch('/api/reconciliation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
