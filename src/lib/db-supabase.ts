@@ -756,7 +756,7 @@ export class SupabaseDb {
   async getStockMovements(filters?: { product_id?: string; startDate?: string; endDate?: string }): Promise<StockMovement[]> {
     let query = this.client
       .from('stock_movements')
-      .select('*')
+      .select('id,shop_id,product_id,product_name,user_id,user_name,movement_type,quantity_change,quantity_before,quantity_after,unit_cost,reference_id,reason,created_at')
       .eq('shop_id', this.shopId)
       .order('created_at', { ascending: false });
     if (filters?.product_id) query = query.eq('product_id', filters.product_id);
