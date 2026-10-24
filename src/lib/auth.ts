@@ -33,17 +33,7 @@ export async function requireShop(request: Request): Promise<AuthContext | NextR
     .eq('id', data.user.id)
     .maybeSingle();
   if (profileError || !profile) {
-    // TEMP DIAGNOSTIC: expose why the profile lookup failed (remove after debugging)
-    return NextResponse.json({
-      error: 'Account setup incomplete. Please finish registration.',
-      debug: {
-        profileError: profileError ? { message: profileError.message, code: profileError.code } : null,
-        hasProfile: Boolean(profile),
-        userId: data.user.id,
-        urlHost: (process.env.NEXT_PUBLIC_INV_SUPABASE_URL || '').replace(/^https?:\/\//, '').split('.')[0],
-        hasServiceKey: Boolean(process.env.INV_SUPABASE_SERVICE_ROLE_KEY),
-      },
-    }, { status: 403 });
+    return NextResponse.json({ error: 'Account setup incomplete. Please finish registration.' }, { status: 403 });
   }
   if (!profile.is_active) {
     return NextResponse.json({ error: 'Account has been deactivated by owner' }, { status: 403 });
