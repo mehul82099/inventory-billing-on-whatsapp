@@ -62,6 +62,10 @@ export default function Home() {
             const d = await res.json();
             setUser(d.user);
             setShop(d.shop);
+          } else if (res.status === 401) {
+            // Refresh could not recover the session: clear it so the next
+            // load starts from a clean sign-in.
+            await supabaseClient.auth.signOut();
           }
         } catch (e) {
           console.error(e);
