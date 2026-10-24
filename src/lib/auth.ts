@@ -43,6 +43,11 @@ export async function requireShop(request: Request): Promise<AuthContext | NextR
   // TEMP server-side probe: exact request URL + raw result of the profile lookup
   const all = await admin.from('users').select('id,email').limit(5);
   console.warn('requireShop users-visible', { rows: (all.data || []).map((r: any) => r.id + '|' + r.email), err: all.error?.code || null });
+  const row0 = (all.data || []).find((r: any) => String(r.id).startsWith('647bd38f'));
+  if (row0) {
+    const q2 = await admin.from('users').select('id').eq('id', row0.id).maybeSingle();
+    console.warn('requireShop self-eq', { found: Boolean(q2.data), rowIdLen: String(row0.id).length, tokenIdLen: String(data.user.id).length, jsEqual: row0.id === data.user.id, rowCodes: String(row0.id).split('').map((c: string) => c.charCodeAt(0)).join(','), tokenCodes: String(data.user.id).split('').map((c: string) => c.charCodeAt(0)).join(',') });
+  }
   const q = admin.from('users').select('*').eq('id', data.user.id).maybeSingle();
   console.warn('requireShop profile-query', { url: (q as any).url ? (q as any).url.toString() : 'n/a' });
   const { data: profile, error: profileError } = await q;
