@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { apiFetch } from '@/lib/api';
 import { Product, Customer, UserProfile, Shop, Invoice } from '@/types';
 import {
   Search,
@@ -221,7 +222,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
         override_reason: overrideConfirmed ? overrideReason : undefined,
       };
 
-      const res = await fetch('/api/invoices', {
+      const res = await apiFetch('/api/invoices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
