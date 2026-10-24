@@ -166,6 +166,30 @@ export class SupabaseDb {
     return data as Invoice;
   }
 
+  // Transactional purchase (stock-in) with durable idempotency.
+  async createPurchaseTx(idempotencyKey: string, input: Record<string, any>): Promise<any> {
+    const { data, error } = await this.client.rpc('create_purchase_tx', {
+      p_shop_id: this.shopId,
+      p_idempotency_key: idempotencyKey,
+      p_input: input,
+    });
+    throwIf(error, 'createPurchaseTx');
+    return data;
+  }
+
+  // Transactional cancel: atomic status claim + restock in one DB transaction.
+  async cancelInvoiceTx(invoiceId: string, userId: string, userName: string, reason: string): Promise<Invoice> {
+    const { data, error } = await this.client.rpc('cancel_invoice_tx', {
+      p_shop_id: this.shopId,
+      p_invoice_id: invoiceId,
+      p_user_id: userId,
+      p_user_name: userName,
+      p_reason: reason,
+    });
+    throwIf(error, 'cancelInvoiceTx');
+    return data as Invoice;
+  }
+
   // Transactional customer return with durable idempotency.
   async createReturnTx(idempotencyKey: string, input: Record<string, any>): Promise<any> {
     const { data, error } = await this.client.rpc('create_return_tx', {
