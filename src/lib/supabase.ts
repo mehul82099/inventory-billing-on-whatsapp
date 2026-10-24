@@ -1,7 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const url = process.env.NEXT_PUBLIC_INV_SUPABASE_URL || '';
+const serviceKey = process.env.INV_SUPABASE_SERVICE_ROLE_KEY || '';
 
 // Backend mode is on only when the server holds a service role key.
 // Without it the app runs its file-based demo mode.
