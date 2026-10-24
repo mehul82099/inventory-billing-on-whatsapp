@@ -130,7 +130,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const handleDeleteProduct = async (id: string) => {
     if (!confirm('Are you sure you want to deactivate this product?')) return;
     try {
-      const res = await fetch(`/api/products?id=${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/products?id=${id}`, { method: 'DELETE' });
       if (res.ok) onRefresh();
     } catch (err) {
       console.error('Delete failed:', err);
