@@ -197,3 +197,24 @@ alter table purchases enable row level security;
 alter table invoices enable row level security;
 alter table customers enable row level security;
 alter table customer_returns enable row level security;
+
+-- Atomic stock adjustment (race-safe). One row-level conditional update.
+create or replace function adjust_stock(p_shop_id text, p_product_id text, p_delta integer, p_require_nonnegative boolean default false)
+returns table(ok boolean, new_qty integer)
+language plpgsql as $$
+declare r integer;
+begin
+  update products
+     set current_quantity = current_quantity + p_delta,
+         updated_at = now()
+   where shop_id = p_shop_id
+     and id = p_product_id
+     and (not p_require_nonnegative or current_quantity + p_delta >= 0)
+  returning current_quantity into r;
+  if not found then
+    return query select false, (select p.current_quantity from products p where p.shop_id = p_shop_id and p.id = p_product_id);
+  else
+    return query select true, r;
+  end if;
+end;
+$$;
