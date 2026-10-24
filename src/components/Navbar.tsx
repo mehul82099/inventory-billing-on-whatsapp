@@ -18,7 +18,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   isOnline = true,
 }) => {
   return (
-    <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur border-b border-slate-800 px-3 py-2.5">
+    <header className="sticky top-0 z-40 relative bg-slate-950/90 backdrop-blur border-b border-slate-800 px-3 py-2.5">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
         {/* Shop Info */}
         <div className="flex items-center gap-2 min-w-0">
@@ -82,6 +82,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
       </div>
+      <div className="seam absolute bottom-0 left-0 right-0 opacity-70" />
     </header>
   );
 };

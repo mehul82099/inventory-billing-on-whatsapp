@@ -135,7 +135,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       )}
 
       {/* Main Bottom Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur border-t border-slate-800 pb-safe">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 relative bg-slate-950/95 backdrop-blur border-t border-slate-800 pb-safe">
+      <div className="seam absolute top-0 left-0 right-0 opacity-60" />
         <div className="max-w-md mx-auto px-2 py-1 flex items-center justify-around">
           {/* Dashboard */}
           <button

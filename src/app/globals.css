@@ -3,14 +3,18 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 15, 23, 42;
-  --background-rgb: 248, 250, 252;
+  --foreground-rgb: 240, 240, 245;
+  --background-rgb: 6, 6, 8;
 }
 
 body {
   color: rgb(var(--foreground-rgb));
-  background: rgb(var(--background-rgb));
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* MONOLITH seam: faint luminous glow falling from the top edge onto true black */
+  background:
+    radial-gradient(120% 42% at 50% -8%, rgba(0, 217, 154, 0.09), transparent 62%),
+    rgb(var(--background-rgb));
+  background-attachment: fixed;
+  font-family: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: contain;
 }
@@ -20,6 +24,20 @@ input, select, textarea, button {
   font-size: 16px; /* Prevents auto-zoom on iOS & Android Chrome */
 }
 
+/* Live-counter numerals: mono, tabular, tight - the "terminal readout" feel */
+.num {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Hairline seam divider, light travelling across the edge */
+.seam {
+  height: 1px;
+  border: 0;
+  background: linear-gradient(90deg, transparent, rgba(34, 242, 180, 0.55), transparent);
+}
+
 /* Hide scrollbars on mobile horizontal chips */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
@@ -27,6 +45,19 @@ input, select, textarea, button {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Slim dark scrollbars elsewhere */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2a33;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* Print styles for thermal printer & standard paper */
