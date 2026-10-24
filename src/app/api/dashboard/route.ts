@@ -1,15 +1,18 @@
 import { NextResponse } from 'next/server';
-import { dbService } from '@/lib/db';
+import { getRequestContext } from '@/lib/backend';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
+    const { context, response } = await getRequestContext(request);
+    if (response) return response;
+    const dbService = context!.db;
   try {
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date') || undefined;
 
-    const metrics = dbService.getDashboardMetrics(date);
-    const shop = dbService.getShop();
+    const metrics = await dbService.getDashboardMetrics(date);
+    const shop = await dbService.getShop();
 
     return NextResponse.json({
       metrics,
