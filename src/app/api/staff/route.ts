@@ -4,10 +4,12 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
-// Staff management: only the shop owner may list or add staff.
-// New accounts are invited through the auth provider's managed invitation
-// email (they set their own password); existing verified accounts are
-// attached to the owner's shop directly - never shared passwords.
+// Staff invitations (owner-only). An invitation never attaches anyone by
+// itself: the invitee must authenticate and explicitly accept before a
+// profile is created. New accounts additionally get the auth provider's
+// managed invitation email so they set their own password. The response is
+// deliberately uniform - it never reveals whether the email already has an
+// account.
 export async function GET(request: Request) {
   const { context, response } = await getRequestContext(request);
   if (response) return response;
@@ -16,7 +18,13 @@ export async function GET(request: Request) {
   }
   try {
     const staff = await context!.db.getUsers();
-    return NextResponse.json({ staff });
+    const admin = getSupabaseAdmin();
+    const { data: invitations } = await admin
+      .from('staff_invitations')
+      .select('id,email,full_name,status,expires_at,created_at')
+      .eq('shop_id', context!.user.shopId)
+      .order('created_at', { ascending: false });
+    return NextResponse.json({ staff, invitations: invitations || [] });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
@@ -41,52 +49,50 @@ export async function POST(request: Request) {
     if (!fullName) {
       return NextResponse.json({ error: 'Staff name is required' }, { status: 400 });
     }
-    const perms = {
+    const admin = getSupabaseAdmin();
+
+    // One open invitation per shop+email.
+    const { data: dup } = await admin
+      .from('staff_invitations')
+      .select('id,status,expires_at')
+      .eq('shop_id', context!.user.shopId)
+      .eq('email', email)
+      .eq('status', 'pending')
+      .maybeSingle();
+    if (dup && new Date(dup.expires_at).getTime() > Date.now()) {
+      return NextResponse.json({ error: 'An invitation for this email is already pending' }, { status: 409 });
+    }
+
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const invitation = {
+      id: 'invst-' + crypto.randomUUID(),
+      shop_id: context!.user.shopId,
+      email,
+      full_name: fullName,
+      role: 'employee',
       can_receive_stock: !!body.can_receive_stock,
       can_apply_custom_discount: !!body.can_apply_custom_discount,
       can_cancel_bills: !!body.can_cancel_bills,
       can_view_purchase_cost: !!body.can_view_purchase_cost,
+      status: 'pending',
+      invited_by: context!.user.userId,
+      expires_at: expiresAt,
+      created_at: new Date().toISOString(),
     };
-
-    const admin = getSupabaseAdmin();
-    let authUserId: string | null = null;
-    let inviteSent = false;
-    const origin = new URL(request.url).origin;
-    const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo: origin });
-    if (!inviteError && inviteData?.user?.id) {
-      authUserId = inviteData.user.id;
-      inviteSent = true;
-    } else {
-      const msg = String(inviteError?.message || '').toLowerCase();
-      if (!msg.includes('already') && !msg.includes('registered')) {
-        return NextResponse.json({ error: 'Could not send invitation: ' + (inviteError?.message || 'unknown error') }, { status: 400 });
-      }
-      for (let page = 1; page <= 10 && !authUserId; page++) {
-        const { data: list } = await admin.auth.admin.listUsers({ page, perPage: 100 });
-        const users = (list?.users || []) as any[];
-        const found = users.find((u) => (u.email || '').toLowerCase() === email);
-        if (found) authUserId = found.id;
-        if (users.length < 100) break;
-      }
-      if (!authUserId) {
-        return NextResponse.json({ error: 'This email already has an account but it could not be looked up' }, { status: 400 });
-      }
+    const { error: insErr } = await admin.from('staff_invitations').insert(invitation);
+    if (insErr) {
+      return NextResponse.json({ error: 'Could not create invitation: ' + insErr.message }, { status: 400 });
     }
 
-    const { data: existing } = await admin
-      .from('users')
-      .select('id,shop_id,role')
-      .eq('id', authUserId)
-      .maybeSingle();
-    if (existing) {
-      return NextResponse.json(
-        { error: existing.shop_id === context!.user.shopId ? 'This person is already on your team' : 'This account already belongs to another shop' },
-        { status: 409 }
-      );
-    }
+    // For brand-new accounts this sends the managed invitation email (they
+    // set their own password). For existing accounts it is a no-op - the
+    // invitee sees the pending invitation at their next sign-in. The result
+    // is intentionally not disclosed to the caller.
+    try {
+      await admin.auth.admin.inviteUserByEmail(email, { redirectTo: new URL(request.url).origin });
+    } catch { /* existing account or provider limit - invitation still stands */ }
 
-    const member = await context!.db.createStaffProfile({ id: authUserId, email, full_name: fullName, ...perms });
-    return NextResponse.json({ success: true, member, invite_sent: inviteSent });
+    return NextResponse.json({ success: true, invitation: { email, expires_at: expiresAt } });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 });
   }
