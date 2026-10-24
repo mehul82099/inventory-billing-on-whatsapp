@@ -154,6 +154,29 @@ export class SupabaseDb {
     return { ok: Boolean(row?.ok), newQty: row?.new_qty === undefined || row?.new_qty === null ? null : Number(row.new_qty) };
   }
 
+  // Transactional invoice creation: whole bill in one DB transaction with
+  // durable idempotency. A retried idempotency key returns the original bill.
+  async createInvoiceTx(idempotencyKey: string, input: Record<string, any>): Promise<Invoice> {
+    const { data, error } = await this.client.rpc('create_invoice_tx', {
+      p_shop_id: this.shopId,
+      p_idempotency_key: idempotencyKey,
+      p_input: input,
+    });
+    throwIf(error, 'createInvoiceTx');
+    return data as Invoice;
+  }
+
+  // Transactional customer return with durable idempotency.
+  async createReturnTx(idempotencyKey: string, input: Record<string, any>): Promise<any> {
+    const { data, error } = await this.client.rpc('create_return_tx', {
+      p_shop_id: this.shopId,
+      p_idempotency_key: idempotencyKey,
+      p_input: input,
+    });
+    throwIf(error, 'createReturnTx');
+    return data;
+  }
+
   private async insertMovement(m: Omit<StockMovement, 'id' | 'shop_id'> & { id?: string }) {
     const row = { ...m, id: m.id || newId('mov'), shop_id: this.shopId };
     const { error } = await this.client.from('stock_movements').insert(row);
