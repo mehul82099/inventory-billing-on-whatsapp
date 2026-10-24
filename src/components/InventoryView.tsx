@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { apiFetch } from '@/lib/api';
 import { Product, Category, Supplier, UserProfile } from '@/types';
 import {
   Search,
@@ -107,7 +108,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setFormError(null);
 
     try {
-      const res = await fetch('/api/products', {
+      const res = await apiFetch('/api/products', {
         method: editingProduct.id ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editingProduct),
@@ -176,7 +177,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           current_quantity: preserveStock && existing ? existing.current_quantity : item.current_quantity,
         };
 
-        await fetch('/api/products', {
+        await apiFetch('/api/products', {
           method: existing ? 'PUT' : 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
