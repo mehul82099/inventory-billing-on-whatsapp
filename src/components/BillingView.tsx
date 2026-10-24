@@ -454,7 +454,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
             >
               <div className="relative w-10 h-10 rounded-xl bg-emerald-500 text-slate-950 flex items-center justify-center font-bold">
                 <ShoppingCart className="w-5 h-5" />
-                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-black">
+                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-paper text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-black">
                   {totalItemsCount}
                 </span>
               </div>
