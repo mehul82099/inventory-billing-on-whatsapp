@@ -177,6 +177,20 @@ export class SupabaseDb {
     return data;
   }
 
+  // Transactional physical stock adjustment: absolute set + movement in one tx.
+  async adjustStockTx(productId: string, newQuantity: number, reason: string, userId: string, userName: string): Promise<any> {
+    const { data, error } = await this.client.rpc('adjust_stock_tx', {
+      p_shop_id: this.shopId,
+      p_product_id: productId,
+      p_new_quantity: newQuantity,
+      p_reason: reason,
+      p_user_id: userId,
+      p_user_name: userName,
+    });
+    throwIf(error, 'adjustStockTx');
+    return data;
+  }
+
   // Transactional cancel: atomic status claim + restock in one DB transaction.
   async cancelInvoiceTx(invoiceId: string, userId: string, userName: string, reason: string): Promise<Invoice> {
     const { data, error } = await this.client.rpc('cancel_invoice_tx', {
