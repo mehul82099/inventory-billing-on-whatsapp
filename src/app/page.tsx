@@ -142,6 +142,10 @@ export default function Home() {
     try {
       localStorage.removeItem('mb_user');
       localStorage.removeItem('mb_shop');
+      // Sign-out never carries an uncertain bill across accounts.
+      for (const k of Object.keys(sessionStorage)) {
+        if (k.startsWith('pending_bill:')) sessionStorage.removeItem(k);
+      }
     } catch (e) {}
   };
 
