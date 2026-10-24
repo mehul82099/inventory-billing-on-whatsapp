@@ -11,6 +11,9 @@ export async function GET(request: Request) {
     const products = await dbService.getProducts();
     const categories = await dbService.getCategories();
     const suppliers = await dbService.getSuppliers();
+    if (context!.user && context!.user.role !== 'owner' && !(context!.user.profile as any)?.can_view_purchase_cost) {
+      for (const prod of products as any[]) { prod.purchase_cost = null; }
+    }
     return NextResponse.json({ products, categories, suppliers });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
