@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiFetch } from '@/lib/api';
 import { Product, Supplier, UserProfile } from '@/types';
 import {
   ArrowDownToLine,
@@ -112,7 +113,7 @@ export const StockInView: React.FC<StockInViewProps> = ({
         })),
       };
 
-      const res = await fetch('/api/purchases', {
+      const res = await apiFetch('/api/purchases', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
