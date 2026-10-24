@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { apiFetch } from '@/lib/api';
 import { Product, Customer, UserProfile, Shop, Invoice } from '@/types';
 import {
@@ -46,6 +46,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
   onOpenAiBilling,
 }) => {
   // Search & Filter
+  const billKeyRef = useRef<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
@@ -220,7 +221,10 @@ export const BillingView: React.FC<BillingViewProps> = ({
         is_tax_invoice: isTaxInvoice,
         allow_negative_override: overrideConfirmed,
         override_reason: overrideConfirmed ? overrideReason : undefined,
-      };
+      } as any;
+
+      if (!billKeyRef.current) billKeyRef.current = crypto.randomUUID();
+      payload.idempotency_key = billKeyRef.current;
 
       const res = await apiFetch('/api/invoices', {
         method: 'POST',
@@ -230,6 +234,9 @@ export const BillingView: React.FC<BillingViewProps> = ({
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create invoice');
+
+      // New bill next time: mint a fresh idempotency key.
+      billKeyRef.current = null;
 
       // Clear cart
       clearCart();
