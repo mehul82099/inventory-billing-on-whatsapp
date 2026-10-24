@@ -34,13 +34,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         const res = await apiFetch('/api/auth/session');
         if (res.status === 403) {
           setMode('setup');
-        } else if (res.status === 401) {
-          await supabase.auth.signOut();
-          setMode('signin');
         } else if (res.ok) {
           const d = await res.json();
           onLoginSuccess(d.user, d.shop);
         }
+        // 401: the app-level restore owns refresh+retry and any sign-out;
+        // do not wipe the session here or refresh recovery can never run.
       } catch {
         // Network hiccup: stay on sign-in rather than guessing setup.
       }
