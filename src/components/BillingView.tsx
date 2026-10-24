@@ -248,6 +248,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
       // Trigger callback with created invoice
       onInvoiceCreated(data.invoice);
     } catch (err: any) {
+      if (/already used with a different bill/i.test(err?.message || '')) billKeyRef.current = null;
       setErrorMsg(err.message || 'Error completing sale');
     } finally {
       setSubmitting(false);
