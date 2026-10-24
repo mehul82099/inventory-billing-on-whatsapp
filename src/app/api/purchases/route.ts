@@ -12,7 +12,9 @@ export async function GET(request: Request) {
     const suppliers = await dbService.getSuppliers();
     return NextResponse.json({ purchases, suppliers });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const msg = err.message || 'Server error';
+    const status = /IDEMPOTENCY_CONFLICT/.test(msg) ? 409 : /not found/i.test(msg) ? 404 : 400;
+    return NextResponse.json({ error: msg }, { status });
   }
 }
 
