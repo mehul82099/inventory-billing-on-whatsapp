@@ -40,11 +40,11 @@ export async function requireShop(request: Request): Promise<AuthContext | NextR
   if (error || !data?.user?.id) {
     return NextResponse.json({ error: 'Session expired. Please sign in again.' }, { status: 401 });
   }
-  const { data: profile, error: profileError } = await admin
-    .from('users')
-    .select('*')
-    .eq('id', data.user.id)
-    .maybeSingle();
+  // TEMP server-side probe: exact request URL + raw result of the profile lookup
+  const q = admin.from('users').select('*').eq('id', data.user.id).maybeSingle();
+  console.warn('requireShop profile-query', { url: (q as any).url ? (q as any).url.toString() : 'n/a' });
+  const { data: profile, error: profileError } = await q;
+  console.warn('requireShop profile-result', { found: Boolean(profile), errCode: profileError?.code || null, errMsg: profileError?.message || null });
   if (profileError || !profile) {
     return NextResponse.json({ error: 'Account setup incomplete. Please finish registration.' }, { status: 403 });
   }
