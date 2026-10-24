@@ -35,6 +35,8 @@ export async function requireShop(request: Request): Promise<AuthContext | NextR
   }
   const admin = getSupabaseAdmin();
   const { data, error } = await admin.auth.getUser(token);
+  // TEMP server-side probe: compare the identity the auth server returns.
+  console.warn('requireShop identity', { uid: data?.user?.id || null, emailLocal: (data?.user?.email || '').split('@')[0], errCode: (error as any)?.code || (error as any)?.status || null });
   if (error || !data?.user?.id) {
     return NextResponse.json({ error: 'Session expired. Please sign in again.' }, { status: 401 });
   }
