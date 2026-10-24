@@ -27,6 +27,15 @@ export async function requireShop(request: Request): Promise<AuthContext | NextR
   if (error || !data?.user) {
     return NextResponse.json({ error: 'Session expired. Please sign in again.' }, { status: 401 });
   }
+  // TEMP server-side probe (sanitized: key format/length and visible-row count only)
+  const sk = process.env.INV_SUPABASE_SERVICE_ROLE_KEY || '';
+  const probe = await admin.from('users').select('id', { count: 'exact', head: true });
+  console.warn('requireShop probe', {
+    keyFmt: sk.startsWith('sb_secret_') ? 'sb_secret' : sk.startsWith('sb_publishable_') ? 'sb_publishable' : sk ? 'other' : 'empty',
+    keyLen: sk.length,
+    visibleUsers: probe.count,
+    probeErr: probe.error?.code || null,
+  });
   const { data: profile, error: profileError } = await admin
     .from('users')
     .select('*')
