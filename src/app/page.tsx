@@ -52,7 +52,12 @@ export default function Home() {
       supabaseClient.auth.getSession().then(async ({ data }) => {
         if (!data.session) return;
         try {
-          const res = await apiFetch('/api/auth/session');
+          let res = await apiFetch('/api/auth/session');
+          if (res.status === 401) {
+            // Stored token may be stale: force one refresh and retry once.
+            await supabaseClient.auth.refreshSession();
+            res = await apiFetch('/api/auth/session');
+          }
           if (res.ok) {
             const d = await res.json();
             setUser(d.user);
