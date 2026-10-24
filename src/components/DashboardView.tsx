@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '@/lib/api';
 import { UserProfile, Shop, Invoice, Product } from '@/types';
 import {
   TrendingUp,
@@ -50,7 +51,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           ? new Date(Date.now() - 86400000).toISOString()
           : new Date().toISOString();
 
-      const res = await fetch(`/api/dashboard?date=${targetDate}`);
+      const res = await apiFetch(`/api/dashboard?date=${targetDate}`);
       const data = await res.json();
       if (res.ok) {
         setMetrics(data.metrics);
