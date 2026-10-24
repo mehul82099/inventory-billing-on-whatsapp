@@ -13,6 +13,13 @@ export async function GET(request: Request) {
 
     const metrics = await dbService.getDashboardMetrics(date);
     const shop = await dbService.getShop();
+    if (context!.user && context!.user.role !== 'owner' && !(context!.user.profile as any)?.can_view_purchase_cost) {
+      const m: any = metrics as any;
+      m.totalGrossProfit = null;
+      m.inventoryCostValuation = null;
+      m.inventoryRetailValuation = null;
+      if (Array.isArray(m.lowStockProducts)) m.lowStockProducts = m.lowStockProducts.map((p: any) => ({ ...p, purchase_cost: null }));
+    }
 
     return NextResponse.json({
       metrics,
