@@ -37,7 +37,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'You do not have permission to receive stock' }, { status: 403 });
     }
 
-    const purchase = await dbService.recordPurchase({
+    if (!body.idempotency_key || typeof body.idempotency_key !== 'string') {
+      return NextResponse.json({ error: 'Missing idempotency key - retry-safe stock-in requires one' }, { status: 400 });
+    }
+    const purchase = await dbService.createPurchaseTx(String(body.idempotency_key), {
       supplier_id: body.supplier_id,
       supplier_invoice_number: body.supplier_invoice_number,
       purchase_date: body.purchase_date,
