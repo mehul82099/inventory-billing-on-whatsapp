@@ -218,3 +218,177 @@ begin
   end if;
 end;
 $$;
+
+-- Durable idempotency keys: one row per client operation key, response stored on success.
+create table if not exists idempotency_keys (
+  shop_id text not null,
+  key text not null,
+  endpoint text not null,
+  response jsonb,
+  created_at timestamptz default now(),
+  primary key (shop_id, key)
+);
+
+-- Whole-invoice creation in ONE database transaction: stock deduction,
+-- movements, customer upsert, invoice insert, idempotency record. Any failure
+-- rolls back everything; a retried key returns the original bill.
+create or replace function create_invoice_tx(p_shop_id text, p_idempotency_key text, p_input jsonb)
+returns jsonb
+language plpgsql as $$
+declare
+  v_shop shops%rowtype;
+  v_prod products%rowtype;
+  v_item jsonb;
+  v_items jsonb := '[]'::jsonb;
+  v_subtotal numeric := 0;
+  v_tax numeric := 0;
+  v_total numeric;
+  v_paid numeric;
+  v_payment_status text;
+  v_now timestamptz := now();
+  v_ms bigint := (extract(epoch from v_now)*1000)::bigint;
+  v_invoice_id text := 'inv-' || v_ms::text || floor(random()*10000)::int::text;
+  v_invoice_number text;
+  v_customer_id text;
+  v_clean_phone text;
+  v_line_total numeric;
+  v_item_disc numeric;
+  v_qty_before integer;
+  v_qty_after integer;
+  v_override boolean := coalesce((p_input->>'allow_negative_override')::boolean, false);
+  v_is_tax boolean := coalesce((p_input->>'is_tax_invoice')::boolean, false);
+  v_overall_disc numeric := coalesce((p_input->>'discount_amount')::numeric, 0);
+  v_stored jsonb;
+  v_invoice invoices%rowtype;
+begin
+  if p_idempotency_key is not null and p_idempotency_key <> '' then
+    select response into v_stored from idempotency_keys
+     where shop_id = p_shop_id and key = p_idempotency_key and endpoint = 'create_invoice';
+    if found and v_stored is not null then
+      return v_stored;
+    end if;
+    insert into idempotency_keys (shop_id, key, endpoint) values (p_shop_id, p_idempotency_key, 'create_invoice');
+  end if;
+
+  select * into v_shop from shops where id = p_shop_id;
+  if not found then raise exception 'Shop not found'; end if;
+  v_invoice_number := coalesce(v_shop.invoice_prefix, 'INV-') || right(v_ms::text, 6);
+
+  for v_item in select * from jsonb_array_elements(p_input->'items') loop
+    select * into v_prod from products where shop_id = p_shop_id and id = v_item->>'product_id' for update;
+    if not found then raise exception 'Product ID % not found in catalog.', v_item->>'product_id'; end if;
+    if not v_shop.allow_negative_stock and not v_override and v_prod.current_quantity < (v_item->>'quantity')::integer then
+      raise exception 'Insufficient stock for "%". Available: %, Requested: %. Override requires authorization.',
+        v_prod.name, v_prod.current_quantity, (v_item->>'quantity')::integer;
+    end if;
+    v_qty_before := v_prod.current_quantity;
+    v_qty_after := v_qty_before - (v_item->>'quantity')::integer;
+    update products set current_quantity = v_qty_after, updated_at = v_now where shop_id = p_shop_id and id = v_prod.id;
+    v_item_disc := coalesce((v_item->>'discount_amount')::numeric, 0);
+    v_line_total := (v_item->>'quantity')::integer * (v_item->>'unit_price')::numeric - v_item_disc;
+    v_subtotal := v_subtotal + v_line_total;
+    v_items := v_items || jsonb_build_object(
+      'id', 'ii-' || v_ms::text || floor(random()*10000)::int::text || '-' || v_prod.id,
+      'product_id', v_prod.id, 'product_name', v_prod.name, 'brand', v_prod.brand, 'sku', v_prod.sku,
+      'quantity', (v_item->>'quantity')::integer, 'unit_price', (v_item->>'unit_price')::numeric,
+      'discount_amount', v_item_disc,
+      'tax_rate', case when v_is_tax then coalesce(v_shop.default_gst_rate, 18) else 0 end,
+      'line_total', v_line_total, 'cost_price_at_sale', coalesce(v_prod.purchase_cost, 0));
+    insert into stock_movements (id, shop_id, product_id, product_name, user_id, user_name, movement_type, quantity_change, quantity_before, quantity_after, unit_cost, reference_id, reason, created_at)
+    values ('mov-' || v_ms::text || floor(random()*10000)::int::text, p_shop_id, v_prod.id, v_prod.name,
+            p_input->>'user_id', p_input->>'user_name', 'SALE', -(v_item->>'quantity')::integer, v_qty_before, v_qty_after,
+            coalesce(v_prod.purchase_cost, 0), v_invoice_id, 'Sold on Inv #' || v_invoice_number, v_now);
+  end loop;
+
+  if v_is_tax and v_shop.enable_gst then
+    v_tax := round(greatest(0, v_subtotal - v_overall_disc) * coalesce(v_shop.default_gst_rate, 18) / 100, 2);
+  end if;
+  v_total := round(greatest(0, v_subtotal - v_overall_disc) + v_tax);
+  v_paid := coalesce((p_input->>'paid_amount')::numeric, v_total);
+  v_payment_status := case when v_paid >= v_total then 'PAID' when v_paid > 0 then 'PARTIALLY_PAID' else 'PENDING' end;
+
+  if p_input->>'customer_phone' is not null and p_input->>'customer_phone' <> '' then
+    v_clean_phone := right(regexp_replace(p_input->>'customer_phone', '\D', '', 'g'), 10);
+    select id into v_customer_id from customers where shop_id = p_shop_id and phone = v_clean_phone;
+    if found then
+      update customers set
+        name = coalesce(nullif(p_input->>'customer_name',''), name),
+        total_spent = coalesce(total_spent,0) + v_paid,
+        visit_count = coalesce(visit_count,0) + 1,
+        last_visit_at = v_now,
+        outstanding_balance = coalesce(outstanding_balance,0) + case when v_paid < v_total then v_total - v_paid else 0 end
+      where shop_id = p_shop_id and id = v_customer_id;
+    else
+      v_customer_id := 'cust-' || v_ms::text || floor(random()*10000)::int::text;
+      insert into customers (id, shop_id, name, phone, outstanding_balance, total_spent, visit_count, last_visit_at, created_at)
+      values (v_customer_id, p_shop_id, coalesce(nullif(p_input->>'customer_name',''),'Retail Customer'), v_clean_phone,
+              case when v_paid < v_total then v_total - v_paid else 0 end, v_paid, 1, v_now, v_now);
+    end if;
+  end if;
+
+  insert into invoices (id, shop_id, invoice_number, customer_id, customer_name, customer_phone, user_id, user_name,
+                        items, subtotal_amount, discount_amount, tax_amount, total_amount, paid_amount,
+                        payment_method, payment_status, status, is_tax_invoice, notes, created_at, updated_at)
+  values (v_invoice_id, p_shop_id, v_invoice_number, v_customer_id,
+          coalesce(nullif(p_input->>'customer_name',''),'Walk-in Customer'), nullif(p_input->>'customer_phone',''),
+          p_input->>'user_id', p_input->>'user_name', v_items, v_subtotal, v_overall_disc, v_tax, v_total, v_paid,
+          coalesce(nullif(p_input->>'payment_method',''),'CASH'), v_payment_status, 'FINALIZED', v_is_tax,
+          nullif(p_input->>'notes',''), v_now, v_now)
+  returning * into v_invoice;
+
+  if p_idempotency_key is not null and p_idempotency_key <> '' then
+    update idempotency_keys set response = to_jsonb(v_invoice) where shop_id = p_shop_id and key = p_idempotency_key;
+  end if;
+  return to_jsonb(v_invoice);
+end;
+$$;
+
+-- Customer return in ONE transaction: return record, restock (if sellable),
+-- movement, idempotency record.
+create or replace function create_return_tx(p_shop_id text, p_idempotency_key text, p_input jsonb)
+returns jsonb
+language plpgsql as $$
+declare
+  v_prod products%rowtype;
+  v_now timestamptz := now();
+  v_ms bigint := (extract(epoch from v_now)*1000)::bigint;
+  v_ret_id text := 'ret-' || v_ms::text || floor(random()*10000)::int::text;
+  v_qty_before integer;
+  v_qty_after integer;
+  v_stored jsonb;
+  v_ret customer_returns%rowtype;
+begin
+  if p_idempotency_key is not null and p_idempotency_key <> '' then
+    select response into v_stored from idempotency_keys
+     where shop_id = p_shop_id and key = p_idempotency_key and endpoint = 'create_return';
+    if found and v_stored is not null then
+      return v_stored;
+    end if;
+    insert into idempotency_keys (shop_id, key, endpoint) values (p_shop_id, p_idempotency_key, 'create_return');
+  end if;
+
+  select * into v_prod from products where shop_id = p_shop_id and id = p_input->>'product_id' for update;
+  if not found then raise exception 'Product not found'; end if;
+
+  insert into customer_returns (id, shop_id, invoice_id, customer_id, user_id, user_name, product_id, product_name, quantity, refund_amount, condition, reason, created_at)
+  values (v_ret_id, p_shop_id, nullif(p_input->>'invoice_id',''), null, p_input->>'user_id', p_input->>'user_name',
+          v_prod.id, v_prod.name, (p_input->>'quantity')::integer, coalesce((p_input->>'refund_amount')::numeric,0),
+          coalesce(nullif(p_input->>'condition',''),'SELLABLE'), nullif(p_input->>'reason',''), v_now)
+  returning * into v_ret;
+
+  if coalesce(nullif(p_input->>'condition',''),'SELLABLE') = 'SELLABLE' then
+    v_qty_before := v_prod.current_quantity;
+    v_qty_after := v_qty_before + (p_input->>'quantity')::integer;
+    update products set current_quantity = v_qty_after, updated_at = v_now where shop_id = p_shop_id and id = v_prod.id;
+    insert into stock_movements (id, shop_id, product_id, product_name, user_id, user_name, movement_type, quantity_change, quantity_before, quantity_after, unit_cost, reason, created_at)
+    values ('mov-' || v_ms::text || floor(random()*10000)::int::text, p_shop_id, v_prod.id, v_prod.name,
+            p_input->>'user_id', p_input->>'user_name', 'CUSTOMER_RETURN', (p_input->>'quantity')::integer, v_qty_before, v_qty_after,
+            coalesce(v_prod.purchase_cost,0), coalesce(nullif(p_input->>'reason',''),'Customer Return'), v_now);
+  end if;
+
+  if p_idempotency_key is not null and p_idempotency_key <> '' then
+    update idempotency_keys set response = to_jsonb(v_ret) where shop_id = p_shop_id and key = p_idempotency_key;
+  end if;
+  return to_jsonb(v_ret);
+end;
+$$;
