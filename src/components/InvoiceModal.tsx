@@ -83,7 +83,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         </div>
 
         {/* Printable & Visible Receipt Card */}
-        <div id="printable-receipt" className="p-5 text-slate-900 bg-white max-h-[60vh] overflow-y-auto">
+        <div id="printable-receipt" className="p-5 text-slate-900 bg-[#ffffff] max-h-[60vh] overflow-y-auto">
           {/* Shop Header */}
           <div className="text-center pb-3 border-b border-dashed border-slate-300">
             <h3 className="text-lg font-black tracking-tight uppercase text-slate-900">{shop.name}</h3>
