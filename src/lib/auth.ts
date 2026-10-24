@@ -41,11 +41,26 @@ export async function requireShop(request: Request): Promise<AuthContext | NextR
   // Explicit column list instead of select('*'): wildcard expansion returned
   // inconsistent results from the hosted API during its schema-cache incident;
   // named columns keep the profile lookup deterministic.
-  const { data: profile, error: profileError } = await admin
+  const cols = 'id,shop_id,email,full_name,role,is_active,can_receive_stock,can_apply_custom_discount,can_cancel_bills,can_view_purchase_cost,created_at,updated_at';
+  let { data: profile, error: profileError } = await admin
     .from('users')
-    .select('id,shop_id,email,full_name,role,is_active,can_receive_stock,can_apply_custom_discount,can_cancel_bills,can_view_purchase_cost,created_at,updated_at')
+    .select(cols)
     .eq('id', data.user.id)
     .maybeSingle();
+  if (!profile && data.user.email) {
+    // Resilience fallback: the hosted API has intermittently missed rows on
+    // id-filtered lookups while email-filtered ones resolve. The email comes
+    // from the same server-verified token, and users.email is unique.
+    const alt = await admin
+      .from('users')
+      .select(cols)
+      .eq('email', data.user.email.toLowerCase())
+      .maybeSingle();
+    if (alt.data && alt.data.id === data.user.id) {
+      profile = alt.data;
+      profileError = null;
+    }
+  }
   if (profileError || !profile) {
     return NextResponse.json({ error: 'Account setup incomplete. Please finish registration.' }, { status: 403 });
   }
