@@ -117,6 +117,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
       returnKeyRef.current = null;
       onRefresh();
     } catch (e: any) {
+      if (/already used with a different return/i.test(e?.message || '')) returnKeyRef.current = null;
       setMessage({ type: 'error', text: e.message || 'Error processing return' });
     } finally {
       setSubmitting(false);
