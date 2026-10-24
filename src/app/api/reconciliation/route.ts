@@ -34,7 +34,10 @@ export async function POST(request: Request) {
 
       return NextResponse.json({ success: true, movement });
     } else if (action === 'return') {
-      const returnRec = await dbService.recordCustomerReturn({
+      if (!body.idempotency_key || typeof body.idempotency_key !== 'string') {
+        return NextResponse.json({ error: 'Missing idempotency key - retry-safe returns require one' }, { status: 400 });
+      }
+      const returnRec = await dbService.createReturnTx(String(body.idempotency_key), {
         invoice_id: body.invoice_id,
         product_id: body.product_id,
         quantity: Number(body.quantity),
