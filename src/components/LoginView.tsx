@@ -8,7 +8,7 @@ interface LoginViewProps {
   onLoginSuccess: (user: UserProfile, shop: Shop) => void;
 }
 
-type Mode = 'signin' | 'register' | 'setup' | 'confirm-email';
+type Mode = 'signin' | 'register' | 'setup' | 'confirm-email' | 'invited';
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const supabase = getSupabaseBrowser();
@@ -22,6 +22,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [shopName, setShopName] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [invitations, setInvitations] = useState<any[]>([]);
 
   // A stored session alone does not mean setup is incomplete: verify with the
   // backend first so an expired/stale session lands on sign-in, not setup.
@@ -33,7 +34,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       try {
         const res = await apiFetch('/api/auth/session');
         if (res.status === 403) {
-          setMode('setup');
+          await enterSetupOrInvite();
         } else if (res.ok) {
           const d = await res.json();
           onLoginSuccess(d.user, d.shop);
@@ -46,6 +47,47 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A 403 (no shop profile) can mean either first-time setup or a pending
+  // staff invitation addressed to this account - check invitations first.
+  const enterSetupOrInvite = async () => {
+    try {
+      const res = await apiFetch('/api/staff/respond');
+      if (res.ok) {
+        const d = await res.json();
+        if (Array.isArray(d.invitations) && d.invitations.length > 0) {
+          setInvitations(d.invitations);
+          setMode('invited');
+          return;
+        }
+      }
+    } catch { /* fall through to setup */ }
+    setMode('setup');
+  };
+
+  const answerInvitation = async (invitationId: string, action: 'accept' | 'decline') => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await apiFetch('/api/staff/respond', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invitation_id: invitationId, action }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not answer invitation');
+      if (action === 'accept') {
+        await finishWithSession();
+      } else {
+        setInvitations((prev) => prev.filter((i) => i.id !== invitationId));
+        if (invitations.length <= 1) setMode('setup');
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Could not answer invitation');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const finishWithSession = async () => {
     const res = await apiFetch('/api/auth/session');
@@ -62,7 +104,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     } catch (err: any) {
       // Verified account that has not completed shop setup yet: resume setup.
       if (/setup incomplete/i.test(err?.message || '')) {
-        setMode('setup');
+        await enterSetupOrInvite();
         return;
       }
       throw err;
@@ -154,6 +196,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             {isBackend && mode === 'register' && 'Create your account'}
             {isBackend && mode === 'setup' && 'Set up your shop'}
             {isBackend && mode === 'confirm-email' && 'Confirm your email'}
+            {isBackend && mode === 'invited' && 'You are invited'}
           </span>
           <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
             <Lock className="w-3 h-3" /> Secure Access
@@ -167,7 +210,45 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           </div>
         )}
 
-        {mode === 'confirm-email' ? (
+        {mode === 'invited' ? (
+          <div className="space-y-3 text-xs text-slate-300">
+            <p>You have been invited to join a shop as staff. Accept to start billing with your own login.</p>
+            {invitations.map((inv) => (
+              <div key={inv.id} className="p-3 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
+                <div className="font-bold text-slate-100">{inv.shop_name}</div>
+                <div className="text-slate-400">Name: {inv.full_name}</div>
+                <div className="text-slate-500 text-[10px]">
+                  Permissions: {[
+                    inv.can_receive_stock && 'receive stock',
+                    inv.can_apply_custom_discount && 'discounts',
+                    inv.can_cancel_bills && 'cancel bills',
+                    inv.can_view_purchase_cost && 'purchase cost',
+                  ].filter(Boolean).join(', ') || 'billing only'}
+                  {' '}- invitation expires {new Date(inv.expires_at).toLocaleDateString()}
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => answerInvitation(inv.id, 'accept')}
+                    className="flex-1 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold transition disabled:opacity-50"
+                  >
+                    Accept & Join
+                  </button>
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => answerInvitation(inv.id, 'decline')}
+                    className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold transition disabled:opacity-50"
+                  >
+                    Decline
+                  </button>
+                </div>
+              </div>
+            ))}
+            <p className="text-[10px] text-slate-500">Not you? Sign out and use your own email.</p>
+          </div>
+        ) : mode === 'confirm-email' ? (
           <div className="space-y-4 text-xs text-slate-300">
             <p>
               We sent a confirmation link to <span className="font-bold text-white">{email}</span>. Open it to
