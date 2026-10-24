@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { apiFetch } from '@/lib/api';
 import { Product, Supplier, UserProfile } from '@/types';
 import {
@@ -32,6 +32,7 @@ export const StockInView: React.FC<StockInViewProps> = ({
   user,
   onStockReceived,
 }) => {
+  const purchaseKeyRef = useRef<string | null>(null);
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id || '');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0]);
@@ -113,6 +114,9 @@ export const StockInView: React.FC<StockInViewProps> = ({
         })),
       };
 
+      if (!purchaseKeyRef.current) purchaseKeyRef.current = crypto.randomUUID();
+      (payload as any).idempotency_key = purchaseKeyRef.current;
+
       const res = await apiFetch('/api/purchases', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -122,6 +126,7 @@ export const StockInView: React.FC<StockInViewProps> = ({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to record purchase');
 
+      purchaseKeyRef.current = null;
       setSuccessMessage('Stock successfully received and inventory updated!');
       setItems([
         {
