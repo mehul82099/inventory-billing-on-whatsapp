@@ -18,11 +18,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   isOnline = true,
 }) => {
   return (
-    <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur border-b border-slate-800 px-3 py-2.5">
+    <header className="sticky top-0 z-40 relative bg-slate-950/90 backdrop-blur border-b border-slate-700 px-3 py-2.5">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
         {/* Shop Info */}
         <div className="flex items-center gap-2 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center font-bold text-white text-base shadow-lg shadow-emerald-500/20 shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center font-bold text-paper text-base shadow-lg shadow-emerald-500/20 shrink-0">
             {shop.name.charAt(0)}
           </div>
           <div className="min-w-0">
@@ -50,7 +50,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* AI Billing Trigger Button */}
           <button
             onClick={onOpenAiBilling}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-medium shadow-md shadow-violet-500/20 transition active:scale-95"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-paper text-xs font-medium shadow-md shadow-violet-500/20 transition active:scale-95"
             title="AI Natural Language Billing"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
@@ -82,6 +82,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
       </div>
+      <div className="seam absolute bottom-0 left-0 right-0 opacity-60" />
     </header>
   );
 };
