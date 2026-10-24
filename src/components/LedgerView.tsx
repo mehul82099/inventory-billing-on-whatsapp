@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { apiFetch } from '@/lib/api';
 import { DailyLedgerRow, StockMovement, UserProfile, Shop } from '@/types';
 import {
   FileSpreadsheet,
@@ -32,7 +33,7 @@ export const LedgerView: React.FC<LedgerViewProps> = ({ user, shop }) => {
   const fetchLedger = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/ledger?date=${selectedDate}`);
+      const res = await apiFetch(`/api/ledger?date=${selectedDate}`);
       const data = await res.json();
       if (res.ok) {
         setLedgerRows(data.ledger || []);
