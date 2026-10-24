@@ -36,8 +36,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Authenticated user ID is required' }, { status: 401 });
     }
 
-    // Atomic invoice creation & stock deduction
-    const invoice = await dbService.createInvoice({
+    if (!body.idempotency_key || typeof body.idempotency_key !== 'string') {
+      return NextResponse.json({ error: 'Missing idempotency key - retry-safe billing requires one' }, { status: 400 });
+    }
+
+    // Whole bill in one DB transaction; retried keys return the original bill.
+    const invoice = await dbService.createInvoiceTx(String(body.idempotency_key), {
       customer_name: body.customer_name || 'Walk-in Customer',
       customer_phone: body.customer_phone,
       user_id: body.user_id,
@@ -61,6 +65,8 @@ export async function POST(request: Request) {
       shop,
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Error creating invoice' }, { status: 400 });
+    const msg = err.message || 'Error creating invoice';
+    const status = /not found/i.test(msg) ? 404 : 400;
+    return NextResponse.json({ error: msg }, { status });
   }
 }
