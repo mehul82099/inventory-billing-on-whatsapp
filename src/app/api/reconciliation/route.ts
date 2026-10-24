@@ -1,16 +1,20 @@
 import { NextResponse } from 'next/server';
-import { dbService } from '@/lib/db';
+import { getRequestContext } from '@/lib/backend';
 
 export async function POST(request: Request) {
+    const { context, response } = await getRequestContext(request);
+    if (response) return response;
+    const dbService = context!.db;
   try {
     const body = await request.json();
+    if (context!.user) { body.user_id = context!.user.userId; body.user_name = context!.user.fullName; }
     const action = body.action; // 'adjust' or 'return'
 
     if (!body.user_id) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 401 });
     }
 
-    const user = dbService.getUserById(body.user_id);
+    const user = await dbService.getUserById(body.user_id);
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 401 });
     }
@@ -20,7 +24,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Only shop owner can authorize physical stock adjustments' }, { status: 403 });
       }
 
-      const movement = dbService.recordAdjustment({
+      const movement = await dbService.recordAdjustment({
         product_id: body.product_id,
         new_quantity: Number(body.new_quantity),
         reason: body.reason,
@@ -30,7 +34,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json({ success: true, movement });
     } else if (action === 'return') {
-      const returnRec = dbService.recordCustomerReturn({
+      const returnRec = await dbService.recordCustomerReturn({
         invoice_id: body.invoice_id,
         product_id: body.product_id,
         quantity: Number(body.quantity),
