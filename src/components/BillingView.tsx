@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { apiFetch } from '@/lib/api';
 import { Product, Customer, UserProfile, Shop, Invoice } from '@/types';
 import {
@@ -47,6 +47,71 @@ export const BillingView: React.FC<BillingViewProps> = ({
 }) => {
   // Search & Filter
   const billKeyRef = useRef<string | null>(null);
+  const [pendingBill, setPendingBill] = useState<{ key: string; payload: any; ts: number } | null>(null);
+  const [recoveredInvoice, setRecoveredInvoice] = useState<any | null>(null);
+
+  // Recover an interrupted bill attempt that survived a reload: a finalized
+  // bill whose outcome never reached the client must be reviewed, not
+  // silently re-billed under a fresh key.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('pending_bill');
+      if (!raw) return;
+      const pending = JSON.parse(raw);
+      if (!pending?.key) { sessionStorage.removeItem('pending_bill'); return; }
+      (async () => {
+        try {
+          const res = await apiFetch('/api/invoices?idem_key=' + encodeURIComponent(pending.key));
+          const data = await res.json();
+          if (res.ok && data.found && data.invoice) {
+            sessionStorage.removeItem('pending_bill');
+            billKeyRef.current = null;
+            setRecoveredInvoice(data.invoice);
+          } else {
+            setPendingBill(pending);
+          }
+        } catch {
+          setPendingBill(pending);
+        }
+      })();
+    } catch { /* ignore corrupt recovery state */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const retryPendingBill = async () => {
+    if (!pendingBill) return;
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      const res = await apiFetch('/api/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(pendingBill.payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create invoice');
+      sessionStorage.removeItem('pending_bill');
+      setPendingBill(null);
+      billKeyRef.current = null;
+      onInvoiceCreated(data.invoice);
+    } catch (err: any) {
+      if (/already used with a different bill/i.test(err?.message || '')) {
+        sessionStorage.removeItem('pending_bill');
+        setPendingBill(null);
+        billKeyRef.current = null;
+      }
+      setErrorMsg(err.message || 'Error completing sale');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const discardPendingBill = () => {
+    sessionStorage.removeItem('pending_bill');
+    setPendingBill(null);
+    billKeyRef.current = null;
+  };
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
@@ -225,6 +290,9 @@ export const BillingView: React.FC<BillingViewProps> = ({
 
       if (!billKeyRef.current) billKeyRef.current = crypto.randomUUID();
       payload.idempotency_key = billKeyRef.current;
+      // Durable retry state: survives a reload so an uncertain outcome can be
+      // recovered instead of silently re-billed under a fresh key.
+      try { sessionStorage.setItem('pending_bill', JSON.stringify({ key: billKeyRef.current, payload, ts: Date.now() })); } catch {}
 
       const res = await apiFetch('/api/invoices', {
         method: 'POST',
@@ -237,6 +305,8 @@ export const BillingView: React.FC<BillingViewProps> = ({
 
       // New bill next time: mint a fresh idempotency key.
       billKeyRef.current = null;
+      try { sessionStorage.removeItem('pending_bill'); } catch {}
+      setPendingBill(null);
 
       // Clear cart
       clearCart();
@@ -248,7 +318,11 @@ export const BillingView: React.FC<BillingViewProps> = ({
       // Trigger callback with created invoice
       onInvoiceCreated(data.invoice);
     } catch (err: any) {
-      if (/already used with a different bill/i.test(err?.message || '')) billKeyRef.current = null;
+      if (/already used with a different bill/i.test(err?.message || '')) {
+        billKeyRef.current = null;
+        try { sessionStorage.removeItem('pending_bill'); } catch {}
+        setPendingBill(null);
+      }
       setErrorMsg(err.message || 'Error completing sale');
     } finally {
       setSubmitting(false);
@@ -635,6 +709,21 @@ export const BillingView: React.FC<BillingViewProps> = ({
             </div>
 
             {/* Error Message */}
+            {recoveredInvoice && (
+              <div className="mb-3 p-3 rounded-xl bg-emerald-950/50 border border-emerald-700 text-emerald-200 text-xs flex items-center justify-between gap-2">
+                <span>Your last bill was completed: <b>{recoveredInvoice.invoice_number || 'saved'}</b>. No need to bill again.</span>
+                <button type="button" onClick={() => setRecoveredInvoice(null)} className="px-2 py-1 rounded-lg bg-slate-800 text-slate-300">OK</button>
+              </div>
+            )}
+            {pendingBill && (
+              <div className="mb-3 p-3 rounded-xl bg-amber-950/50 border border-amber-700 text-amber-200 text-xs space-y-2">
+                <div>A previous bill's outcome is unknown (connection lost). It was <b>not</b> confirmed saved. Review it instead of billing again.</div>
+                <div className="flex gap-2">
+                  <button type="button" disabled={submitting} onClick={retryPendingBill} className="px-3 py-1.5 rounded-lg bg-amber-600 text-slate-950 font-bold">Retry same bill</button>
+                  <button type="button" onClick={discardPendingBill} className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300">Discard</button>
+                </div>
+              </div>
+            )}
             {errorMsg && (
               <div className="px-4 py-2 bg-red-950/60 border-t border-red-800 text-xs text-red-300 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
