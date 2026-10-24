@@ -43,6 +43,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [permsSuccess, setPermsSuccess] = useState(false);
 
   // Backup / Restore
+  const [newStaff, setNewStaff] = useState({ full_name: '', email: '', can_receive_stock: false, can_apply_custom_discount: false, can_cancel_bills: false, can_view_purchase_cost: false });
+  const [addingStaff, setAddingStaff] = useState(false);
+  const [staffMessage, setStaffMessage] = useState<string | null>(null);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
 
   const handleShopSubmit = async (e: React.FormEvent) => {
@@ -65,6 +68,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       console.error(e);
     } finally {
       setSavingShop(false);
+    }
+  };
+
+  const handleAddStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddingStaff(true);
+    setStaffMessage(null);
+    try {
+      const res = await apiFetch('/api/staff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newStaff),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add staff');
+      setStaffMessage(
+        data.invite_sent
+          ? `Invitation email sent to ${newStaff.email}. They set their own password from the link - no shared passwords.`
+          : `${newStaff.email} added to your team. They sign in with their existing account.`
+      );
+      setNewStaff({ full_name: '', email: '', can_receive_stock: false, can_apply_custom_discount: false, can_cancel_bills: false, can_view_purchase_cost: false });
+      onRefresh();
+    } catch (err: any) {
+      setStaffMessage(err.message || 'Failed to add staff');
+    } finally {
+      setAddingStaff(false);
     }
   };
 
@@ -332,6 +361,64 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               {savingPerms ? 'Saving Permissions...' : 'Update Employee Permissions'}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Add Staff / Cashier (Owner Only) */}
+      {currentUser.role === 'owner' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3 text-xs">
+          <h3 className="font-bold text-slate-200 flex items-center gap-1.5 pb-2 border-b border-slate-800">
+            <UserCheck className="w-4 h-4 text-emerald-400" /> Add Staff / Cashier Login
+          </h3>
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            Each staff member gets their own login by email invitation - no shared passwords. Permissions below are enforced by the server on every action.
+          </p>
+          <form onSubmit={handleAddStaff} className="space-y-2.5">
+            <input
+              type="text"
+              required
+              placeholder="Staff full name"
+              value={newStaff.full_name}
+              onChange={(e) => setNewStaff({ ...newStaff, full_name: e.target.value })}
+              className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            />
+            <input
+              type="email"
+              required
+              placeholder="Staff email (invite goes here)"
+              value={newStaff.email}
+              onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
+              className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex items-center gap-2 p-2 rounded-xl bg-slate-800/60 border border-slate-700/60 cursor-pointer">
+                <input type="checkbox" checked={newStaff.can_receive_stock} onChange={(e) => setNewStaff({ ...newStaff, can_receive_stock: e.target.checked })} className="w-4 h-4 accent-emerald-500 rounded" />
+                <span className="text-slate-300">Receive stock</span>
+              </label>
+              <label className="flex items-center gap-2 p-2 rounded-xl bg-slate-800/60 border border-slate-700/60 cursor-pointer">
+                <input type="checkbox" checked={newStaff.can_apply_custom_discount} onChange={(e) => setNewStaff({ ...newStaff, can_apply_custom_discount: e.target.checked })} className="w-4 h-4 accent-emerald-500 rounded" />
+                <span className="text-slate-300">Custom discounts</span>
+              </label>
+              <label className="flex items-center gap-2 p-2 rounded-xl bg-slate-800/60 border border-slate-700/60 cursor-pointer">
+                <input type="checkbox" checked={newStaff.can_cancel_bills} onChange={(e) => setNewStaff({ ...newStaff, can_cancel_bills: e.target.checked })} className="w-4 h-4 accent-emerald-500 rounded" />
+                <span className="text-slate-300">Cancel bills</span>
+              </label>
+              <label className="flex items-center gap-2 p-2 rounded-xl bg-slate-800/60 border border-slate-700/60 cursor-pointer">
+                <input type="checkbox" checked={newStaff.can_view_purchase_cost} onChange={(e) => setNewStaff({ ...newStaff, can_view_purchase_cost: e.target.checked })} className="w-4 h-4 accent-emerald-500 rounded" />
+                <span className="text-slate-300">See purchase cost</span>
+              </label>
+            </div>
+            <button
+              type="submit"
+              disabled={addingStaff}
+              className="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold transition disabled:opacity-50"
+            >
+              {addingStaff ? 'Adding...' : 'Add Staff Member'}
+            </button>
+          </form>
+          {staffMessage && (
+            <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-800 text-emerald-300">{staffMessage}</div>
+          )}
         </div>
       )}
 
