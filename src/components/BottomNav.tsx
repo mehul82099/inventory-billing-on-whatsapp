@@ -120,7 +120,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                     >
                       <div
                         className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                          isActive ? 'bg-emerald-500 text-white' : 'bg-slate-700/60 text-slate-400'
+                          isActive ? 'bg-red-500 text-paper' : 'bg-slate-700/60 text-slate-500'
                         }`}
                       >
                         <Icon className="w-4 h-4" />
@@ -135,7 +135,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       )}
 
       {/* Main Bottom Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur border-t border-slate-800 pb-safe">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 relative bg-slate-950/95 backdrop-blur border-t border-slate-700 pb-safe">
+      <div className="seam absolute top-0 left-0 right-0 opacity-60" />
         <div className="max-w-md mx-auto px-2 py-1 flex items-center justify-around">
           {/* Dashboard */}
           <button
@@ -164,7 +165,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             onClick={() => handleTabClick('billing')}
             className="flex flex-col items-center -mt-5 group"
           >
-            <div className="w-13 h-13 p-3 rounded-full bg-gradient-to-tr from-emerald-500 to-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/40 ring-4 ring-slate-900 flex items-center justify-center transition transform active:scale-90 group-hover:brightness-110">
+            <div className="w-13 h-13 p-3 rounded-full bg-gradient-to-tr from-red-500 to-red-400 text-paper shadow-lg shadow-red-500/40 ring-4 ring-slate-950 flex items-center justify-center transition transform active:scale-90 group-hover:brightness-110">
               <PlusCircle className="w-7 h-7 stroke-[2.2]" />
             </div>
             <span className="text-[10px] font-bold text-emerald-400 mt-1">New Bill</span>
