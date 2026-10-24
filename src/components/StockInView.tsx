@@ -139,6 +139,7 @@ export const StockInView: React.FC<StockInViewProps> = ({
       setNotes('');
       onStockReceived();
     } catch (err: any) {
+      if (/already used with a different purchase/i.test(err?.message || '')) purchaseKeyRef.current = null;
       setErrorMsg(err.message || 'Error processing purchase');
     } finally {
       setSubmitting(false);
