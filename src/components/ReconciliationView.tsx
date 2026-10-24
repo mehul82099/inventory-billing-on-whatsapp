@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { apiFetch } from '@/lib/api';
 import { Product, UserProfile } from '@/types';
 import {
@@ -73,6 +73,12 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
     }
   };
 
+  const returnKeyRef = useRef<string | null>(null);
+  const getReturnKey = () => {
+    if (!returnKeyRef.current) returnKeyRef.current = crypto.randomUUID();
+    return returnKeyRef.current;
+  };
+
   const handleReturnSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const prod = products.find((p) => p.id === returnProductId);
@@ -86,6 +92,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'return',
+          idempotency_key: getReturnKey(),
           product_id: returnProductId,
           quantity: Number(returnQty),
           refund_amount: Number(refundAmount),
@@ -107,6 +114,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
         }`,
       });
       setReturnReason('');
+      returnKeyRef.current = null;
       onRefresh();
     } catch (e: any) {
       setMessage({ type: 'error', text: e.message || 'Error processing return' });
