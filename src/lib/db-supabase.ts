@@ -51,6 +51,18 @@ export class SupabaseDb {
     return (data || []) as UserProfile[];
   }
 
+  async lookupIdempotencyKey(key: string, endpoint: string): Promise<any | null> {
+    const { data, error } = await this.client
+      .from('idempotency_keys')
+      .select('key,endpoint,response,created_at')
+      .eq('shop_id', this.shopId)
+      .eq('key', key)
+      .eq('endpoint', endpoint)
+      .maybeSingle();
+    throwIf(error, 'lookupIdempotencyKey');
+    return data;
+  }
+
   async createStaffProfile(input: { id: string; email: string; full_name: string; can_receive_stock: boolean; can_apply_custom_discount: boolean; can_cancel_bills: boolean; can_view_purchase_cost: boolean }): Promise<UserProfile> {
     const now = new Date().toISOString();
     const row = {
