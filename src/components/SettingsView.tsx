@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiFetch } from '@/lib/api';
 import { Shop, UserProfile } from '@/types';
 import {
   Settings,
@@ -50,7 +51,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setShopSuccess(false);
 
     try {
-      const res = await fetch('/api/settings', {
+      const res = await apiFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ shop: formData }),
@@ -73,7 +74,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setPermsSuccess(false);
 
     try {
-      const res = await fetch('/api/settings', {
+      const res = await apiFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -105,7 +106,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       const text = await file.text();
       const json = JSON.parse(text);
 
-      const res = await fetch('/api/backup', {
+      const res = await apiFetch('/api/backup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(json),
