@@ -23,12 +23,29 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // If a verified session exists but shop setup is incomplete, resume setup.
+  // A stored session alone does not mean setup is incomplete: verify with the
+  // backend first so an expired/stale session lands on sign-in, not setup.
   useEffect(() => {
     if (!supabase) return;
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) setMode('setup');
-    });
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) return;
+      try {
+        const res = await apiFetch('/api/auth/session');
+        if (res.status === 403) {
+          setMode('setup');
+        } else if (res.status === 401) {
+          await supabase.auth.signOut();
+          setMode('signin');
+        } else if (res.ok) {
+          const d = await res.json();
+          onLoginSuccess(d.user, d.shop);
+        }
+      } catch {
+        // Network hiccup: stay on sign-in rather than guessing setup.
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const finishWithSession = async () => {
