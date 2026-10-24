@@ -35,23 +35,14 @@ export async function requireShop(request: Request): Promise<AuthContext | NextR
   }
   const admin = getSupabaseAdmin();
   const { data, error } = await admin.auth.getUser(token);
-  // TEMP server-side probe: compare the identity the auth server returns.
-  console.warn('requireShop identity', { uid: data?.user?.id || null, emailLocal: (data?.user?.email || '').split('@')[0], errCode: (error as any)?.code || (error as any)?.status || null });
-  if (error || !data?.user?.id) {
-    return NextResponse.json({ error: 'Session expired. Please sign in again.' }, { status: 401 });
-  }
-  // TEMP server-side probe: exact request URL + raw result of the profile lookup
-  const all = await admin.from('users').select('id,email').limit(5);
-  console.warn('requireShop users-visible', { rows: (all.data || []).map((r: any) => r.id + '|' + r.email), err: all.error?.code || null });
-  const row0 = (all.data || []).find((r: any) => String(r.id).startsWith('647bd38f'));
-  if (row0) {
-    const q2 = await admin.from('users').select('id').eq('id', row0.id).maybeSingle();
-    console.warn('requireShop self-eq', { found: Boolean(q2.data), rowIdLen: String(row0.id).length, tokenIdLen: String(data.user.id).length, jsEqual: row0.id === data.user.id, rowCodes: String(row0.id).split('').map((c: string) => c.charCodeAt(0)).join(','), tokenCodes: String(data.user.id).split('').map((c: string) => c.charCodeAt(0)).join(',') });
-  }
-  const q = admin.from('users').select('*').eq('id', data.user.id).maybeSingle();
-  console.warn('requireShop profile-query', { url: (q as any).url ? (q as any).url.toString() : 'n/a' });
-  const { data: profile, error: profileError } = await q;
-  console.warn('requireShop profile-result', { found: Boolean(profile), errCode: profileError?.code || null, errMsg: profileError?.message || null });
+  // Explicit column list instead of select('*'): wildcard expansion returned
+  // inconsistent results from the hosted API during its schema-cache incident;
+  // named columns keep the profile lookup deterministic.
+  const { data: profile, error: profileError } = await admin
+    .from('users')
+    .select('id,shop_id,email,full_name,role,is_active,can_receive_stock,can_apply_custom_discount,can_cancel_bills,can_view_purchase_cost,created_at,updated_at')
+    .eq('id', data.user.id)
+    .maybeSingle();
   if (profileError || !profile) {
     return NextResponse.json({ error: 'Account setup incomplete. Please finish registration.' }, { status: 403 });
   }
