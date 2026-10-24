@@ -345,6 +345,8 @@ export class SupabaseDb {
     const invoiceItems: any[] = [];
 
     // 2. Deduct stock + movements
+    const decremented: Array<{ product_id: string; quantity: number }> = [];
+    try {
     for (const item of invoiceData.items) {
       const prod = prods[item.product_id];
       const itemDisc = Number(item.discount_amount) || 0;
@@ -352,15 +354,11 @@ export class SupabaseDb {
       subtotal += lineTotal;
       const dec = await this.adjustStock(prod.id, -item.quantity, !shop.allow_negative_stock && !invoiceData.allow_negative_override);
       if (!dec.ok) {
-        // Roll back any stock already deducted for this invoice.
-        for (const it of invoiceData.items) {
-          if (it.product_id === item.product_id) break;
-          try { await this.adjustStock(it.product_id, it.quantity); } catch { /* best effort */ }
-        }
         throw new Error(
           `Insufficient stock for "${prod.name}". Available: ${dec.newQty ?? 0}, Requested: ${item.quantity}. Override requires authorization.`
         );
       }
+      decremented.push({ product_id: item.product_id, quantity: item.quantity });
       const qtyAfter = dec.newQty ?? 0;
       const qtyBefore = qtyAfter + item.quantity;
       invoiceItems.push({
@@ -470,19 +468,16 @@ export class SupabaseDb {
       created_at: now,
       updated_at: now,
     };
-    let data: any, error: any;
-    try {
-      const res = await this.client.from('invoices').insert(newInvoice).select().single();
-      data = res.data; error = res.error;
-    } catch (e) { error = e; }
-    if (error) {
-      // Compensate: restore all deducted stock so a failed bill never leaks inventory.
-      for (const it of invoiceData.items) {
-        try { await this.adjustStock(it.product_id, it.quantity); } catch { /* best effort */ }
-      }
-      throwIf(error, 'createInvoice');
-    }
+    const { data, error } = await this.client.from('invoices').insert(newInvoice).select().single();
+    throwIf(error, 'createInvoice');
     return data as Invoice;
+    } catch (err) {
+      // Compensate: restore every deducted unit so a failed bill never leaks inventory.
+      for (const d of decremented) {
+        try { await this.adjustStock(d.product_id, d.quantity); } catch { /* best effort */ }
+      }
+      throw err;
+    }
   }
 
   async cancelInvoice(invoiceId: string, user_id: string, user_name: string, reason: string): Promise<Invoice> {
