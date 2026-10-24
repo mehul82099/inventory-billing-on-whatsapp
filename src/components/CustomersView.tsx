@@ -318,7 +318,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
               <button
                 onClick={handleCancelInvoice}
                 disabled={cancelling || !cancelReason.trim()}
-                className="flex-1 py-2 rounded-xl bg-red-600 text-white text-xs font-bold hover:bg-red-500 disabled:opacity-50"
+                className="flex-1 py-2 rounded-xl bg-red-600 text-paper text-xs font-bold hover:bg-red-500 disabled:opacity-50"
               >
                 {cancelling ? 'Restocking...' : 'Confirm Cancel'}
               </button>
