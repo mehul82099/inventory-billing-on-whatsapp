@@ -41,7 +41,16 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const handleBackendSignIn = async () => {
     const { error } = await supabase!.auth.signInWithPassword({ email: email.trim(), password });
     if (error) throw new Error(error.message === 'Invalid login credentials' ? 'Invalid email or password' : error.message);
-    await finishWithSession();
+    try {
+      await finishWithSession();
+    } catch (err: any) {
+      // Verified account that has not completed shop setup yet: resume setup.
+      if (/setup incomplete/i.test(err?.message || '')) {
+        setMode('setup');
+        return;
+      }
+      throw err;
+    }
   };
 
   const handleBackendRegister = async () => {
