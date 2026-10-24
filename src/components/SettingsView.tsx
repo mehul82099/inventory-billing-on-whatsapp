@@ -326,7 +326,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               type="button"
               onClick={handleSavePermissions}
               disabled={savingPerms}
-              className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition disabled:opacity-50"
+              className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-paper font-bold transition disabled:opacity-50"
             >
               {savingPerms ? 'Saving Permissions...' : 'Update Employee Permissions'}
             </button>
