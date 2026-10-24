@@ -22,7 +22,7 @@ export async function POST(
       return NextResponse.json({ error: 'You do not have permission to cancel bills' }, { status: 403 });
     }
 
-    const cancelled = await dbService.cancelInvoice(
+    const cancelled = await dbService.cancelInvoiceTx(
       id,
       body.user_id,
       user.full_name,
