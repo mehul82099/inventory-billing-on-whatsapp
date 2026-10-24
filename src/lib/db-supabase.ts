@@ -51,6 +51,31 @@ export class SupabaseDb {
     return (data || []) as UserProfile[];
   }
 
+  async createStaffProfile(input: { id: string; email: string; full_name: string; can_receive_stock: boolean; can_apply_custom_discount: boolean; can_cancel_bills: boolean; can_view_purchase_cost: boolean }): Promise<UserProfile> {
+    const now = new Date().toISOString();
+    const row = {
+      id: input.id,
+      shop_id: this.shopId,
+      email: input.email,
+      full_name: input.full_name,
+      role: 'employee',
+      is_active: true,
+      can_receive_stock: input.can_receive_stock,
+      can_apply_custom_discount: input.can_apply_custom_discount,
+      can_cancel_bills: input.can_cancel_bills,
+      can_view_purchase_cost: input.can_view_purchase_cost,
+      created_at: now,
+      updated_at: now,
+    };
+    const { data, error } = await this.client
+      .from('users')
+      .insert(row)
+      .select('id,shop_id,email,full_name,role,is_active,can_receive_stock,can_apply_custom_discount,can_cancel_bills,can_view_purchase_cost,created_at,updated_at')
+      .single();
+    throwIf(error, 'createStaffProfile');
+    return data as UserProfile;
+  }
+
   async getUserByEmail(email: string): Promise<UserProfile | undefined> {
     const { data, error } = await this.client
       .from('users')
