@@ -24,13 +24,13 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Only shop owner can authorize physical stock adjustments' }, { status: 403 });
       }
 
-      const movement = await dbService.recordAdjustment({
-        product_id: body.product_id,
-        new_quantity: Number(body.new_quantity),
-        reason: body.reason,
-        user_id: user.id,
-        user_name: user.full_name,
-      });
+      const movement = await dbService.adjustStockTx(
+        body.product_id,
+        Number(body.new_quantity),
+        body.reason || '',
+        user.id,
+        user.full_name
+      );
 
       return NextResponse.json({ success: true, movement });
     } else if (action === 'return') {
@@ -53,6 +53,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ error: 'Invalid reconciliation action' }, { status: 400 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    const msg = err.message || 'Server error';
+      const status = /IDEMPOTENCY_CONFLICT/.test(msg) ? 409 : /not found/i.test(msg) ? 404 : 400;
+      return NextResponse.json({ error: msg.replace('createReturnTx: ','').replace('adjustStockTx: ','') }, { status });
   }
 }
