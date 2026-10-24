@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     }
 
     // Existing profile? Registration already done.
-    const { data: existing } = await admin.from('users').select('*').eq('id', authUser.id).maybeSingle();
+    const { data: existing } = await admin.from('users').select('id,shop_id,email,full_name,role,is_active,can_receive_stock,can_apply_custom_discount,can_cancel_bills,can_view_purchase_cost,created_at,updated_at').eq('id', authUser.id).maybeSingle();
     if (existing) {
       const { data: shop } = await admin.from('shops').select('*').eq('id', existing.shop_id).single();
       return NextResponse.json({ success: true, user: existing, shop, alreadyRegistered: true });
