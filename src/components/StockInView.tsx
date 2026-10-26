@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { apiFetch } from '@/lib/api';
 import { Product, Supplier, UserProfile } from '@/types';
 import {
   ArrowDownToLine,
@@ -31,6 +32,7 @@ export const StockInView: React.FC<StockInViewProps> = ({
   user,
   onStockReceived,
 }) => {
+  const purchaseKeyRef = useRef<string | null>(null);
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id || '');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0]);
@@ -112,7 +114,10 @@ export const StockInView: React.FC<StockInViewProps> = ({
         })),
       };
 
-      const res = await fetch('/api/purchases', {
+      if (!purchaseKeyRef.current) purchaseKeyRef.current = crypto.randomUUID();
+      (payload as any).idempotency_key = purchaseKeyRef.current;
+
+      const res = await apiFetch('/api/purchases', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -121,6 +126,7 @@ export const StockInView: React.FC<StockInViewProps> = ({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to record purchase');
 
+      purchaseKeyRef.current = null;
       setSuccessMessage('Stock successfully received and inventory updated!');
       setItems([
         {
@@ -133,6 +139,7 @@ export const StockInView: React.FC<StockInViewProps> = ({
       setNotes('');
       onStockReceived();
     } catch (err: any) {
+      if (/already used with a different purchase/i.test(err?.message || '')) purchaseKeyRef.current = null;
       setErrorMsg(err.message || 'Error processing purchase');
     } finally {
       setSubmitting(false);

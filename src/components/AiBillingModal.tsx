@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiFetch } from '@/lib/api';
 import { Product } from '@/types';
 import { ParsedAiBill, ParsedBillItem } from '@/lib/ai-parser';
 import {
@@ -79,7 +80,7 @@ export const AiBillingModal: React.FC<AiBillingModalProps> = ({
     setError(null);
 
     try {
-      const res = await fetch('/api/ai-bill', {
+      const res = await apiFetch('/api/ai-bill', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt }),
@@ -139,7 +140,7 @@ export const AiBillingModal: React.FC<AiBillingModalProps> = ({
                 onClick={toggleListening}
                 className={`p-2 rounded-xl transition ${
                   isListening
-                    ? 'bg-red-500 text-white animate-bounce'
+                    ? 'bg-red-500 text-paper animate-bounce'
                     : 'bg-slate-700 text-slate-300 hover:text-white'
                 }`}
                 title="Voice Input (Speech to text)"
@@ -150,7 +151,7 @@ export const AiBillingModal: React.FC<AiBillingModalProps> = ({
                 type="button"
                 onClick={handleParse}
                 disabled={loading || !prompt.trim()}
-                className="p-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white transition disabled:opacity-50 active:scale-95 shadow-md shadow-violet-600/30"
+                className="p-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-paper transition disabled:opacity-50 active:scale-95 shadow-md shadow-violet-600/30"
                 title="Process with AI"
               >
                 {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}

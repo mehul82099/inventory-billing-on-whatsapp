@@ -1,15 +1,25 @@
 import { NextResponse } from 'next/server';
-import { dbService } from '@/lib/db';
+import { getRequestContext } from '@/lib/backend';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
+    const { context, response } = await getRequestContext(request);
+    if (response) return response;
+    const dbService = context!.db;
   try {
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date') || undefined;
 
-    const metrics = dbService.getDashboardMetrics(date);
-    const shop = dbService.getShop();
+    const metrics = await dbService.getDashboardMetrics(date);
+    const shop = await dbService.getShop();
+    if (context!.user && context!.user.role !== 'owner' && !(context!.user.profile as any)?.can_view_purchase_cost) {
+      const m: any = metrics as any;
+      m.totalGrossProfit = null;
+      m.inventoryCostValuation = null;
+      m.inventoryRetailValuation = null;
+      if (Array.isArray(m.lowStockProducts)) m.lowStockProducts = m.lowStockProducts.map((p: any) => ({ ...p, purchase_cost: null }));
+    }
 
     return NextResponse.json({
       metrics,

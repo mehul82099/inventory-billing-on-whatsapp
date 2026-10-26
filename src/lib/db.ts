@@ -491,9 +491,13 @@ export function loadStore(): StoreData {
 }
 
 export function saveStore(data: StoreData): void {
-  ensureDataDir();
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
   cachedStore = data;
+  try {
+    ensureDataDir();
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (e) {
+    // Read-only deployments (e.g. Vercel): serve the demo from memory.
+  }
 }
 
 // ==========================================

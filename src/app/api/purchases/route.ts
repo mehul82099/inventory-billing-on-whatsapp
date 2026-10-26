@@ -1,21 +1,30 @@
 import { NextResponse } from 'next/server';
-import { dbService } from '@/lib/db';
+import { getRequestContext } from '@/lib/backend';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
+    const { context, response } = await getRequestContext(request);
+    if (response) return response;
+    const dbService = context!.db;
   try {
-    const purchases = dbService.getPurchases();
-    const suppliers = dbService.getSuppliers();
+    const purchases = await dbService.getPurchases();
+    const suppliers = await dbService.getSuppliers();
     return NextResponse.json({ purchases, suppliers });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const msg = err.message || 'Server error';
+    const status = /IDEMPOTENCY_CONFLICT/.test(msg) ? 409 : /not found/i.test(msg) ? 404 : 400;
+    return NextResponse.json({ error: msg }, { status });
   }
 }
 
 export async function POST(request: Request) {
+    const { context, response } = await getRequestContext(request);
+    if (response) return response;
+    const dbService = context!.db;
   try {
     const body = await request.json();
+    if (context!.user) { body.user_id = context!.user.userId; body.user_name = context!.user.fullName; }
 
     if (!body.items || !Array.isArray(body.items) || body.items.length === 0) {
       return NextResponse.json({ error: 'At least one received item is required' }, { status: 400 });
@@ -25,12 +34,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 401 });
     }
 
-    const user = dbService.getUserById(body.user_id);
+    const user = await dbService.getUserById(body.user_id);
     if (!user || (!user.can_receive_stock && user.role !== 'owner')) {
       return NextResponse.json({ error: 'You do not have permission to receive stock' }, { status: 403 });
     }
 
-    const purchase = dbService.recordPurchase({
+    if (!body.idempotency_key || typeof body.idempotency_key !== 'string') {
+      return NextResponse.json({ error: 'Missing idempotency key - retry-safe stock-in requires one' }, { status: 400 });
+    }
+    const purchase = await dbService.createPurchaseTx(String(body.idempotency_key), {
       supplier_id: body.supplier_id,
       supplier_invoice_number: body.supplier_invoice_number,
       purchase_date: body.purchase_date,
